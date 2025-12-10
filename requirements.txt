@@ -1,0 +1,16 @@
+# Python和Miniconda环境管理器依赖包
+# 
+# 核心GUI库
+tkinter  # Python内置，无需单独安装
+# 系统操作和网络请求
+requests>=2.25.0
+
+# 如果需要更丰富的GUI组件，可以安装以下包（可选）
+# ttkthemes>=3.2.0  # 更多的ttk主题
+# pillow>=8.0.0     # 图片支持
+# matplotlib>=3.3.0 # 图表支持
+
+# 开发和调试工具（可选）
+# pytest>=6.0.0    # 单元测试
+# black>=21.0.0    # 代码格式化
+# flake8>=3.8.0    # 代码检查
