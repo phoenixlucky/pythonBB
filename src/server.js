@@ -12,6 +12,7 @@ import {
   listVirtualEnvironments
 } from "./services/environment-service.js";
 import {
+  getLatestPackageVersion,
   installFromRequirements,
   installPackage,
   listPackages,
@@ -154,6 +155,12 @@ async function handleApi(request, response, pathname, searchParams) {
     if (request.method === "POST" && pathname === "/api/packages/show") {
       const body = await readBody(request);
       sendJson(response, 200, await showPackageInfo(parseTarget(body.target), body.packageName, preferredCondaRoot));
+      return;
+    }
+
+    if (request.method === "POST" && pathname === "/api/packages/latest-version") {
+      const body = await readBody(request);
+      sendJson(response, 200, await getLatestPackageVersion(body.packageName));
       return;
     }
 

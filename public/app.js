@@ -2,7 +2,8 @@ const state = {
   overview: null,
   conda: [],
   venvs: [],
-  pythonVersionsLoaded: false
+  pythonVersionsLoaded: false,
+  installedPackages: []
 };
 
 const elements = {
@@ -20,6 +21,7 @@ const elements = {
   venvList: document.querySelector("#venvList"),
   venvInventoryMeta: document.querySelector("#venvInventoryMeta"),
   packageTargetSelect: document.querySelector("#packageTargetSelect"),
+  installedPackageSelect: document.querySelector("#installedPackageSelect"),
   packageResults: document.querySelector("#packageResults"),
   packageResultMeta: document.querySelector("#packageResultMeta"),
   condaSourceSelect: document.querySelector("#condaSourceSelect"),
@@ -37,7 +39,8 @@ const elements = {
   operationTitle: document.querySelector("#operationTitle"),
   operationMessage: document.querySelector("#operationMessage"),
   operationDetails: document.querySelector("#operationDetails"),
-  operationCloseButton: document.querySelector("#operationCloseButton")
+  operationCloseButton: document.querySelector("#operationCloseButton"),
+  refreshInstalledPackagesButton: document.querySelector("#refreshInstalledPackagesButton")
 };
 
 let confirmResolver = null;
@@ -103,15 +106,31 @@ function closeOperationModal() {
 }
 
 async function request(url, options = {}) {
-  const response = await fetch(url, {
-    headers: { "Content-Type": "application/json" },
-    ...options
-  });
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || "请求失败");
+  const controller = new AbortController();
+  const timeoutMs = options.timeoutMs || 0;
+  const timeoutId = timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null;
+
+  try {
+    const response = await fetch(url, {
+      headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
+      ...options
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "请求失败");
+    }
+    return data;
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw new Error(`请求超时（>${timeoutMs}ms）`);
+    }
+    throw error;
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
   }
-  return data;
 }
 
 function switchPanel(panelName) {
@@ -242,7 +261,7 @@ function renderVenvs() {
 function refreshPackageTargets() {
   const targets = [{ label: "系统 Python", value: JSON.stringify({ type: "system" }) }];
   state.conda.forEach((env) => {
-    targets.push({ label: `conda: ${env.name}`, value: JSON.stringify({ type: "conda", name: env.name }) });
+    targets.push({ label: `conda: ${env.name}`, value: JSON.stringify({ type: "conda", name: env.name, path: env.path }) });
   });
   state.venvs.forEach((env) => {
     targets.push({ label: `venv: ${env.name}`, value: JSON.stringify({ type: "venv", name: env.name, path: env.path }) });
@@ -250,6 +269,19 @@ function refreshPackageTargets() {
   elements.packageTargetSelect.innerHTML = targets
     .map((target) => `<option value='${target.value}'>${target.label}</option>`)
     .join("");
+}
+
+function renderInstalledPackageOptions() {
+  elements.installedPackageSelect.innerHTML = state.installedPackages.length
+    ? [
+        `<option value="">请选择一个已安装包</option>`,
+        ...state.installedPackages.map((pkg) => `<option value="${pkg.name}">${pkg.name} (${pkg.version})</option>`)
+      ].join("")
+    : `<option value="">未读取到已安装包</option>`;
+}
+
+function renderInstalledPackageLoading(text = "正在加载已安装包...") {
+  elements.installedPackageSelect.innerHTML = `<option value="">${text}</option>`;
 }
 
 function updateCondaSummary() {
@@ -361,6 +393,44 @@ async function loadVenvs(options = {}) {
   }
 }
 
+async function loadInstalledPackages(options = {}) {
+  if (!options.silent) {
+    setBusy("正在加载已安装包...");
+  }
+
+  const target = getSelectedTarget();
+  if (!target) {
+    state.installedPackages = [];
+    renderInstalledPackageLoading("请先选择目标环境");
+    if (!options.silent) {
+      setReady("请先选择目标环境。");
+    }
+    return;
+  }
+
+  renderInstalledPackageLoading();
+
+  try {
+    state.installedPackages = await request("/api/packages/list", {
+      method: "POST",
+      timeoutMs: 12000,
+      body: JSON.stringify({
+        target
+      })
+    });
+    renderInstalledPackageOptions();
+    if (!options.silent) {
+      setReady(`已加载 ${state.installedPackages.length} 个包。`);
+    }
+  } catch (error) {
+    state.installedPackages = [];
+    renderInstalledPackageLoading("加载失败，点“刷新包下拉”重试");
+    if (!options.silent) {
+      setReady(`包下拉加载失败: ${error.message}`);
+    }
+  }
+}
+
 async function createCondaEnvironment(event) {
   event.preventDefault();
   const form = event.currentTarget;
@@ -469,13 +539,38 @@ async function deleteVenv(targetPath) {
 }
 
 function getSelectedTarget() {
+  if (!elements.packageTargetSelect.value) {
+    return null;
+  }
   return JSON.parse(elements.packageTargetSelect.value);
 }
 
 async function runPackageAction(action, payload = {}) {
-  setBusy(`正在执行包操作: ${action}`);
+  if (["install", "uninstall", "show", "latest-version"].includes(action) && !String(payload.packageName || "").trim()) {
+    setReady("请输入包名。");
+    elements.packageResults.textContent = "请输入包名后再执行该操作。";
+    elements.packageResultMeta.textContent = "缺少包名";
+    return;
+  }
+
+  const actionMessageMap = {
+    install: "正在安装包...",
+    uninstall: "正在卸载包...",
+    show: "正在读取包信息...",
+    list: "正在列出包...",
+    "latest-version": "正在查询 PyPI 最新版本...",
+    "upgrade-pip": "正在升级 pip...",
+    "install-requirements": "正在从 requirements 安装..."
+  };
+  const timeoutMap = {
+    show: 12000,
+    "latest-version": 7000
+  };
+
+  setBusy(actionMessageMap[action] || `正在执行包操作: ${action}`);
   const data = await request(`/api/packages/${action}`, {
     method: "POST",
+    timeoutMs: timeoutMap[action],
     body: JSON.stringify({
       target: getSelectedTarget(),
       ...payload
@@ -488,6 +583,26 @@ async function runPackageAction(action, payload = {}) {
   } else if (action === "show") {
     elements.packageResults.textContent = data.content;
     elements.packageResultMeta.textContent = "包信息";
+  } else if (action === "latest-version") {
+    const installedPackage = state.installedPackages.find((pkg) => pkg.name === data.packageName);
+    const lines = [
+      `包名: ${data.packageName}`,
+      `PyPI 最新版本: ${data.latestVersion}`,
+      `当前环境已安装: ${installedPackage ? installedPackage.version : "未安装"}`
+    ];
+
+    if (data.summary) {
+      lines.push(`简介: ${data.summary}`);
+    }
+    if (data.homePage) {
+      lines.push(`主页: ${data.homePage}`);
+    }
+    if (data.packageUrl) {
+      lines.push(`PyPI: ${data.packageUrl}`);
+    }
+
+    elements.packageResults.textContent = lines.join("\n");
+    elements.packageResultMeta.textContent = "最新版本";
   } else {
     elements.packageResults.textContent = data.message;
     elements.packageResultMeta.textContent = "操作完成";
@@ -578,14 +693,27 @@ function wireVenvForm() {
 function wirePackageActions() {
   const form = document.querySelector("#packageActionForm");
 
+  elements.packageTargetSelect.addEventListener("change", () => {
+    loadInstalledPackages({ silent: true });
+  });
+
+  elements.installedPackageSelect.addEventListener("change", () => {
+    if (elements.installedPackageSelect.value) {
+      form.packageName.value = elements.installedPackageSelect.value;
+    }
+  });
+
   document.querySelector("#refreshTargetsButton").addEventListener("click", async () => {
     try {
       await Promise.all([loadCondaEnvironments({ silent: true }), loadVenvs(), loadOverview()]);
+      await loadInstalledPackages({ silent: true });
     } catch (error) {
       setReady(error.message);
       alert(error.message);
     }
   });
+
+  elements.refreshInstalledPackagesButton.addEventListener("click", () => loadInstalledPackages());
 
   document.querySelector("#installPackageButton").addEventListener("click", () =>
     runPackageAction("install", { packageName: form.packageName.value })
@@ -599,6 +727,9 @@ function wirePackageActions() {
   document.querySelector("#listPackagesButton").addEventListener("click", () => runPackageAction("list"));
   document.querySelector("#showPackageInfoButton").addEventListener("click", () =>
     runPackageAction("show", { packageName: form.packageName.value })
+  );
+  document.querySelector("#latestPackageVersionButton").addEventListener("click", () =>
+    runPackageAction("latest-version", { packageName: form.packageName.value })
   );
   document.querySelector("#upgradePipButton").addEventListener("click", () => runPackageAction("upgrade-pip"));
   document.querySelector("#installRequirementsButton").addEventListener("click", () =>
@@ -652,6 +783,7 @@ async function bootstrap() {
     await loadOverview();
     loadCondaEnvironments({ silent: true }).catch((error) => setReady(`Conda 环境刷新失败: ${error.message}`));
     loadVenvs({ silent: true }).catch((error) => setReady(`虚拟环境扫描失败: ${error.message}`));
+    loadInstalledPackages({ silent: true });
     loadPythonVersions();
   } catch (error) {
     setReady(error.message);

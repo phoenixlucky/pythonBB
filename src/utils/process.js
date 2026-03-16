@@ -14,8 +14,9 @@ function quoteShellArg(arg) {
 export function runCommand(command, args = [], options = {}) {
   return new Promise((resolve, reject) => {
     if (options.shell) {
+      let settled = false;
       const commandLine = [command, ...args].map(quoteShellArg).join(" ");
-      exec(
+      const child = exec(
         commandLine,
         {
           cwd: options.cwd,
@@ -23,6 +24,10 @@ export function runCommand(command, args = [], options = {}) {
           env: { ...process.env, ...(options.env || {}) }
         },
         (error, stdout, stderr) => {
+          if (settled) {
+            return;
+          }
+          settled = true;
           if (error) {
             resolve({
               ok: false,
@@ -41,6 +46,22 @@ export function runCommand(command, args = [], options = {}) {
           });
         }
       );
+
+      if (options.timeoutMs) {
+        setTimeout(() => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          child.kill();
+          resolve({
+            ok: false,
+            code: 124,
+            stdout: "",
+            stderr: `命令执行超时（>${options.timeoutMs}ms）`
+          });
+        }, options.timeoutMs);
+      }
       return;
     }
 
@@ -60,6 +81,15 @@ export function runCommand(command, args = [], options = {}) {
 
     let stdout = "";
     let stderr = "";
+    let settled = false;
+
+    const finish = (payload) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolve(payload);
+    };
 
     child.stdout.on("data", (chunk) => {
       stdout += chunk.toString();
@@ -71,12 +101,27 @@ export function runCommand(command, args = [], options = {}) {
 
     child.on("error", (error) => reject(error));
     child.on("close", (code) => {
-      resolve({
+      finish({
         ok: code === 0,
         code,
         stdout,
         stderr
       });
     });
+
+    if (options.timeoutMs) {
+      setTimeout(() => {
+        if (settled) {
+          return;
+        }
+        child.kill();
+        finish({
+          ok: false,
+          code: 124,
+          stdout,
+          stderr: stderr || `命令执行超时（>${options.timeoutMs}ms）`
+        });
+      }, options.timeoutMs);
+    }
   });
 }

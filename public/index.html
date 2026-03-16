@@ -95,8 +95,9 @@
                   <label>
                     <span>Python 版本</span>
                     <select name="pythonVersion">
+                      <option value="latest" selected>latest</option>
                       <option>3.14</option>
-                      <option selected>3.13</option>
+                      <option>3.13</option>
                       <option>3.12</option>
                       <option>3.11</option>
                       <option>3.10</option>
@@ -126,8 +127,9 @@
                   <label>
                     <span>目标 Python 版本</span>
                     <select name="targetPythonVersion">
+                      <option value="latest" selected>latest</option>
                       <option>3.14</option>
-                      <option selected>3.13</option>
+                      <option>3.13</option>
                       <option>3.12</option>
                       <option>3.11</option>
                       <option>3.10</option>
@@ -216,7 +218,13 @@
                   <select name="target" id="packageTargetSelect"></select>
                 </label>
                 <label>
-                  <span>包名</span>
+                  <span>已安装包下拉</span>
+                  <select name="installedPackage" id="installedPackageSelect">
+                    <option value="">正在加载已安装包...</option>
+                  </select>
+                </label>
+                <label>
+                  <span>包名，可手动输入</span>
                   <input name="packageName" placeholder="例如 requests" />
                 </label>
                 <div class="button-row">
@@ -225,8 +233,10 @@
                   <button class="ghost-button" type="button" id="uninstallPackageButton">卸载</button>
                 </div>
                 <div class="button-row">
+                  <button class="ghost-button" type="button" id="refreshInstalledPackagesButton">刷新包下拉</button>
                   <button class="ghost-button" type="button" id="listPackagesButton">列出包</button>
                   <button class="ghost-button" type="button" id="showPackageInfoButton">显示信息</button>
+                  <button class="ghost-button" type="button" id="latestPackageVersionButton">查询最新版本</button>
                   <button class="ghost-button" type="button" id="upgradePipButton">升级 pip</button>
                 </div>
                 <label>

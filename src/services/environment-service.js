@@ -4,6 +4,7 @@ import path from "node:path";
 import { runCommand } from "../utils/process.js";
 
 const IS_WINDOWS = process.platform === "win32";
+const SUPPORTED_PYTHON_VERSIONS = ["3.14", "3.13", "3.12", "3.11", "3.10", "3.9"];
 
 function dedupeBy(items, keyFn) {
   const seen = new Set();
@@ -19,6 +20,47 @@ function dedupeBy(items, keyFn) {
 
 function isBlockedWindowsAlias(targetPath) {
   return IS_WINDOWS && targetPath.toLowerCase().includes("\\windowsapps\\");
+}
+
+function resolveRequestedPythonVersion(version) {
+  if (!version || version === "latest") {
+    return SUPPORTED_PYTHON_VERSIONS[0];
+  }
+  return version;
+}
+
+function formatCondaFailure(stderr = "", stdout = "") {
+  const combined = `${stderr}\n${stdout}`.trim();
+  const normalized = combined.replace(/\r/g, "");
+
+  if (normalized.includes("CondaVerificationError")) {
+    const corruptedPackageMatch = normalized.match(/located at\s+([^\n]+?)\s+appears to be corrupted/i);
+    const packagePath = corruptedPackageMatch?.[1]?.trim() || "conda 包缓存";
+
+    return [
+      "Conda 包缓存损坏，当前环境创建/克隆没有成功。",
+      `损坏位置: ${packagePath}`,
+      "建议处理:",
+      "1. 删除该损坏包目录，或执行 `conda clean --packages --tarballs`",
+      "2. 重新运行 `conda install python=3.14` 或重新执行本次创建",
+      "3. 如仍失败，先执行 `conda update -n base -c defaults conda`",
+      "",
+      "原始错误摘要:",
+      "CondaVerificationError: Python 包缓存内容缺失"
+    ].join("\n");
+  }
+
+  const filteredLines = normalized
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !line.includes("==> WARNING: A newer version of conda exists."))
+    .filter((line) => !line.startsWith("current version:"))
+    .filter((line) => !line.startsWith("latest version:"))
+    .filter((line) => !line.startsWith("Please update conda by running"))
+    .filter((line) => !line.startsWith("$ conda update -n base -c defaults conda"));
+
+  return filteredLines.join("\n") || "Conda 操作失败";
 }
 
 async function pathExists(targetPath) {
@@ -325,7 +367,7 @@ export async function createCondaEnvironment(payload, preferredRoot = "") {
         "-y"
       ], preferredRoot);
       if (!result.ok) {
-        throw new Error(result.stderr || "完整克隆失败");
+        throw new Error(formatCondaFailure(result.stderr, result.stdout));
       }
       return { message: `环境 '${payload.name}' 已基于 '${payload.sourceName}' 完整克隆成功` };
     }
@@ -348,7 +390,7 @@ export async function createCondaEnvironment(payload, preferredRoot = "") {
         "-y"
       ], preferredRoot);
       if (!result.ok) {
-        throw new Error(result.stderr || "创建环境失败");
+        throw new Error(formatCondaFailure(result.stderr, result.stdout));
       }
       return { message: `环境 '${payload.name}' 创建成功` };
     }
@@ -357,10 +399,10 @@ export async function createCondaEnvironment(payload, preferredRoot = "") {
     exportArgs.push(payload.explicitPackagesOnly ? "--from-history" : "--no-builds");
     const exported = await runCondaCommand(exportArgs, preferredRoot);
     if (!exported.ok) {
-      throw new Error(exported.stderr || "导出环境失败");
+      throw new Error(formatCondaFailure(exported.stderr, exported.stdout));
     }
 
-    const targetPythonVersion = payload.targetPythonVersion || sourceEnv.pythonVersion || "3.11";
+    const targetPythonVersion = resolveRequestedPythonVersion(payload.targetPythonVersion) || sourceEnv.pythonVersion || "3.11";
     const rewritten = rewriteExportedEnvironment(exported.stdout, payload.name, targetPythonVersion);
     const tempFile = path.join(os.tmpdir(), `pythonbb-${Date.now()}-${payload.name}.yml`);
 
@@ -368,7 +410,7 @@ export async function createCondaEnvironment(payload, preferredRoot = "") {
     try {
       const result = await runCondaCommand(["env", "create", "-f", tempFile], preferredRoot);
       if (!result.ok) {
-        throw new Error(result.stderr || "按导出配置创建环境失败");
+        throw new Error(formatCondaFailure(result.stderr, result.stdout));
       }
       return { message: `环境 '${payload.name}' 创建成功` };
     } finally {
@@ -376,14 +418,14 @@ export async function createCondaEnvironment(payload, preferredRoot = "") {
     }
   }
 
-  const args = ["create", "-n", payload.name, `python=${payload.pythonVersion || "3.11"}`];
+  const args = ["create", "-n", payload.name, `python=${resolveRequestedPythonVersion(payload.pythonVersion)}`];
   for (const pkg of payload.packages || []) {
     args.push(pkg);
   }
   args.push("-y");
   const result = await runCondaCommand(args, preferredRoot);
   if (!result.ok) {
-    throw new Error(result.stderr || "创建环境失败");
+    throw new Error(formatCondaFailure(result.stderr, result.stdout));
   }
   return { message: `环境 '${payload.name}' 创建成功` };
 }
@@ -409,7 +451,7 @@ export async function deleteCondaEnvironment(name, preferredRoot = "") {
       }
     }
 
-    throw new Error(result.stderr || result.stdout || "删除环境失败");
+    throw new Error(formatCondaFailure(result.stderr, result.stdout));
   }
   return { message: `环境 '${name}' 删除成功` };
 }
@@ -566,6 +608,9 @@ export async function resolvePythonExecutable(target, preferredRoot = "") {
   }
 
   if (target.type === "conda") {
+    if (target.path) {
+      return getCondaPythonExecutable(target.path);
+    }
     const { environments } = await listCondaEnvironments(preferredRoot);
     const env = environments.find((entry) => entry.name === target.name);
     if (!env) {
