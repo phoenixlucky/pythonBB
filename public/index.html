@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PythonBB Web Console</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-block">
+          <p class="eyebrow">Python / Conda / Venv</p>
+          <h1>PythonBB Web Console</h1>
+          <p class="brand-copy">把本地环境管理从桌面窗口改成浏览器控制台。</p>
+        </div>
+        <nav class="nav-list">
+          <button class="nav-item active" data-panel="overview">概览</button>
+          <button class="nav-item" data-panel="conda">Conda</button>
+          <button class="nav-item" data-panel="venv">虚拟环境</button>
+          <button class="nav-item" data-panel="packages">包管理</button>
+        </nav>
+        <div class="sidebar-footer">
+          <div class="status-pill" id="statusPill">就绪</div>
+          <p id="globalMessage">等待操作。</p>
+        </div>
+      </aside>
+
+      <main class="main-stage">
+        <section class="hero-card">
+          <div>
+            <p class="eyebrow">Local Operations</p>
+            <h2>一套命令行能力，一个浏览器界面。</h2>
+          </div>
+          <div class="hero-meta">
+            <span id="heroNodeVersion">Node</span>
+            <span id="heroCondaState">Conda</span>
+          </div>
+        </section>
+
+        <section class="panel active" id="panel-overview">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Overview</p>
+              <h3>系统与运行时</h3>
+            </div>
+            <button class="ghost-button" id="refreshOverviewButton">刷新</button>
+          </div>
+          <div class="stat-grid" id="overviewStats"></div>
+          <div class="card-grid two-up">
+            <article class="surface-card">
+              <div class="section-head">
+                <h4>Python 版本</h4>
+                <span id="pythonVersionCount">0</span>
+              </div>
+              <div id="pythonVersionsList" class="list-stack"></div>
+            </article>
+            <article class="surface-card">
+              <div class="section-head">
+                <h4>Conda 环境</h4>
+                <span id="condaEnvCount">0</span>
+              </div>
+              <div id="condaOverviewList" class="list-stack"></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel" id="panel-conda">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Conda</p>
+              <h3>环境创建与克隆</h3>
+            </div>
+            <button class="ghost-button" id="refreshCondaButton">刷新环境</button>
+          </div>
+          <div class="card-grid two-up">
+            <article class="surface-card accent-card">
+              <div class="section-head">
+                <h4>创建 Conda 环境</h4>
+                <span>核心操作</span>
+              </div>
+              <form id="condaCreateForm" class="stack-form">
+                <label>
+                  <span>新环境名称</span>
+                  <input name="name" required />
+                </label>
+                <label>
+                  <span>创建方式</span>
+                  <select name="mode" id="condaModeSelect">
+                    <option value="python">按 Python 版本创建</option>
+                    <option value="clone">基于已有环境创建</option>
+                  </select>
+                </label>
+                <div id="condaPythonFields" class="stack-form">
+                  <label>
+                    <span>Python 版本</span>
+                    <select name="pythonVersion">
+                      <option>3.14</option>
+                      <option selected>3.13</option>
+                      <option>3.12</option>
+                      <option>3.11</option>
+                      <option>3.10</option>
+                      <option>3.9</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>额外包</span>
+                    <textarea name="packages" rows="4" placeholder="每行一个包，例如 numpy"></textarea>
+                  </label>
+                </div>
+                <div id="condaCloneFields" class="stack-form hidden">
+                  <label>
+                    <span>源环境</span>
+                    <select name="sourceName" id="condaSourceSelect"></select>
+                  </label>
+                  <div class="toggle-grid">
+                    <label class="check-line">
+                      <input type="checkbox" name="clonePython" checked />
+                      <span>克隆 Python 版本</span>
+                    </label>
+                    <label class="check-line">
+                      <input type="checkbox" name="clonePackages" checked />
+                      <span>克隆已安装库</span>
+                    </label>
+                  </div>
+                  <label>
+                    <span>目标 Python 版本</span>
+                    <select name="targetPythonVersion">
+                      <option>3.14</option>
+                      <option selected>3.13</option>
+                      <option>3.12</option>
+                      <option>3.11</option>
+                      <option>3.10</option>
+                      <option>3.9</option>
+                    </select>
+                  </label>
+                  <label class="check-line">
+                    <input type="checkbox" name="explicitPackagesOnly" />
+                    <span>仅导出显式安装包，降低解算冲突</span>
+                  </label>
+                </div>
+                <article class="summary-card">
+                  <p class="eyebrow">预估执行动作</p>
+                  <pre id="condaSummary"></pre>
+                </article>
+                <button class="primary-button" type="submit">执行创建</button>
+              </form>
+            </article>
+            <article class="surface-card">
+              <div class="section-head">
+                <h4>已检测到的 Conda 环境</h4>
+                <span id="condaInventoryMeta">0 个环境</span>
+              </div>
+              <div id="condaList" class="list-stack"></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel" id="panel-venv">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Virtualenv</p>
+              <h3>虚拟环境</h3>
+            </div>
+            <button class="ghost-button" id="refreshVenvButton">刷新环境</button>
+          </div>
+          <div class="card-grid two-up">
+            <article class="surface-card">
+              <div class="section-head">
+                <h4>创建 venv</h4>
+                <span>标准库方案</span>
+              </div>
+              <form id="venvCreateForm" class="stack-form">
+                <label>
+                  <span>环境名称</span>
+                  <input name="name" required />
+                </label>
+                <label>
+                  <span>目标目录</span>
+                  <input name="targetPath" required />
+                </label>
+                <label>
+                  <span>Python 路径，可选</span>
+                  <input name="pythonPath" placeholder="默认使用 PATH 中的 python" />
+                </label>
+                <button class="primary-button" type="submit">创建虚拟环境</button>
+              </form>
+            </article>
+            <article class="surface-card">
+              <div class="section-head">
+                <h4>现有 venv</h4>
+                <span id="venvInventoryMeta">0 个环境</span>
+              </div>
+              <div id="venvList" class="list-stack"></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel" id="panel-packages">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Packages</p>
+              <h3>包操作</h3>
+            </div>
+            <button class="ghost-button" id="refreshTargetsButton">刷新环境目标</button>
+          </div>
+          <div class="card-grid two-up">
+            <article class="surface-card">
+              <div class="section-head">
+                <h4>安装与维护</h4>
+                <span>pip</span>
+              </div>
+              <form id="packageActionForm" class="stack-form">
+                <label>
+                  <span>目标环境</span>
+                  <select name="target" id="packageTargetSelect"></select>
+                </label>
+                <label>
+                  <span>包名</span>
+                  <input name="packageName" placeholder="例如 requests" />
+                </label>
+                <div class="button-row">
+                  <button class="primary-button" type="button" id="installPackageButton">安装</button>
+                  <button class="ghost-button" type="button" id="upgradePackageButton">升级</button>
+                  <button class="ghost-button" type="button" id="uninstallPackageButton">卸载</button>
+                </div>
+                <div class="button-row">
+                  <button class="ghost-button" type="button" id="listPackagesButton">列出包</button>
+                  <button class="ghost-button" type="button" id="showPackageInfoButton">显示信息</button>
+                  <button class="ghost-button" type="button" id="upgradePipButton">升级 pip</button>
+                </div>
+                <label>
+                  <span>requirements 文件路径</span>
+                  <input name="requirementsPath" placeholder="例如 D:\envs\req.txt" />
+                </label>
+                <button class="ghost-button" type="button" id="installRequirementsButton">从 requirements 安装</button>
+              </form>
+            </article>
+            <article class="surface-card">
+              <div class="section-head">
+                <h4>结果输出</h4>
+                <span id="packageResultMeta">等待操作</span>
+              </div>
+              <div id="packageResults" class="console-surface"></div>
+            </article>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="modal-backdrop hidden" id="confirmModal">
+      <div class="modal-card">
+        <p class="eyebrow">Confirm</p>
+        <h3 id="confirmTitle">确认操作</h3>
+        <p id="confirmMessage" class="modal-copy"></p>
+        <div class="button-row">
+          <button class="ghost-button" type="button" id="confirmCancelButton">取消</button>
+          <button class="primary-button" type="button" id="confirmAcceptButton">确认删除</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-backdrop hidden" id="operationModal">
+      <div class="modal-card operation-card">
+        <p class="eyebrow" id="operationEyebrow">Operation</p>
+        <h3 id="operationTitle">处理中</h3>
+        <p id="operationMessage" class="modal-copy"></p>
+        <pre id="operationDetails" class="operation-details"></pre>
+        <div class="button-row">
+          <button class="ghost-button" type="button" id="operationCloseButton" disabled>关闭</button>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/app.js"></script>
+  </body>
+  </html>

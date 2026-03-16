@@ -1,23 +1,21 @@
 # Python & Miniconda 环境管理器
-一个功能强大的图形界面工具，用于管理Python和Miniconda环境。
+一个基于 Node/JS Web 界面的本地环境管理工具，用于管理 Python、Conda、venv 和包操作。
 
 ## 功能特性
 
 ### 🐍 Python管理
-- 检查已安装的Python版本
-- 下载和安装不同版本的Python
-- 设置默认Python版本
-- 系统Python信息查看
+- 扫描已安装的 Python 版本
+- 查看系统 Python / pip / Node 运行时信息
 
 ### 🔧 Miniconda管理
-- 一键下载和安装Miniconda
 - 创建、删除Conda环境
+- 基于已有Conda环境克隆创建新环境
 - 管理Conda环境列表
 - 自动检测已安装的Miniconda
 
 ### 📦 虚拟环境管理
 - 创建Python虚拟环境
-- 激活和删除虚拟环境
+- 删除虚拟环境
 - 查看环境信息和Python版本
 - 自定义安装路径
 
@@ -42,39 +40,35 @@
    cd pythonBB
    ```
 
-2. **安装依赖**
+2. **确保已安装 Node.js 22+**
    ```bash
-   pip install -r requirements.txt
+   node -v
    ```
 
-3. **运行程序**
+3. **启动 Web 界面**
    ```bash
-   python run_manager.py
+   npm run web
    ```
-   或者直接运行：
-   ```bash
-   python python_manager.py
-   ```
+   然后在浏览器打开 `http://localhost:3210`
 
 ### 程序界面
 
-程序包含5个主要标签页：
+程序包含 4 个主要区域：
 
 #### 📊 概览
 - 显示系统信息和环境状态
 - 查看Python版本和路径
 - 检查pip和conda可用性
 
-#### 🐍 Miniconda
-- 下载和安装Miniconda
+#### 🐍 Miniconda / Conda
 - 管理Conda环境
 - 创建、删除环境
-- 查看环境详细信息
+- 支持基于已有环境克隆
+- 支持仅克隆 Python、仅克隆库、完整克隆
 
 #### 📦 Python
-- 管理多个Python版本
-- 下载特定版本
-- 设置默认版本
+- 扫描多个 Python 版本
+- 展示本机 Python 路径与版本
 
 #### 🏗️ 虚拟环境
 - 创建venv虚拟环境
@@ -88,36 +82,46 @@
 
 ## 文件结构
 
-```
+```text
 pythonBB/
-├── python_manager.py        # 主程序文件
-├── miniconda_installer.py   # Miniconda安装模块
-├── environment_manager.py    # 环境管理模块
-├── run_manager.py          # 启动脚本
-├── requirements.txt         # 依赖列表
-└── README.md              # 说明文档
+├── package.json                 # npm 脚本入口
+├── public/                      # Web 前端资源
+│   ├── index.html
+│   ├── styles.css
+│   └── app.js
+├── src/                         # Node 服务端
+│   ├── server.js
+│   ├── services/
+│   └── utils/
+├── python_manager.py            # 旧版 Tkinter 实现（保留作参考）
+├── environment_manager.py       # 旧版 Python 环境逻辑（保留作参考）
+└── README.md
 ```
 
 ## 使用示例
 
-### 安装Miniconda
-1. 切换到"Miniconda"标签页
-2. 选择版本（如Miniconda3-latest）
-3. 选择安装路径（建议：C:\\Users\\用户名\\miniconda3）
-4. 点击"下载并安装"
+### Web 启动
+1. 在项目根目录运行 `npm run web`
+2. 打开浏览器访问 `http://localhost:3210`
+3. 在左侧导航切换到对应功能区
+
+### 创建Conda环境
+1. 切换到 `Conda`
+2. 输入新环境名称
+3. 选择“按 Python 版本创建”或“基于已有环境创建”
+4. 查看“预估执行动作”摘要区
+5. 点击“执行创建”
 
 ### 创建虚拟环境
-1. 切换到"虚拟环境"标签页
-2. 输入环境名称（如myenv）
-3. 选择Python版本
-4. 选择安装路径
-5. 点击"创建虚拟环境"
+1. 切换到 `虚拟环境`
+2. 输入环境名称和目标目录
+3. 点击“创建虚拟环境”
 
 ### 安装Python包
-1. 切换到"包管理"标签页
+1. 切换到 `包管理`
 2. 选择目标环境
-3. 输入包名（如numpy）
-4. 点击"安装"
+3. 输入包名（如 `numpy`）
+4. 选择安装、升级、卸载或列出
 
 ## 高级功能
 

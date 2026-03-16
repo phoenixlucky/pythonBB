@@ -6,6 +6,7 @@ Python & Miniconda 环境管理器启动脚本
 """
 import sys
 import os
+import subprocess
 from pathlib import Path
 
 def check_dependencies():

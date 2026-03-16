@@ -477,74 +477,373 @@ class PythonManager:
     
     def create_conda_env(self):
         """创建Conda环境"""
+        from environment_manager import EnvironmentManager
+
+        env_manager = EnvironmentManager(self.config.get('miniconda_path', ''))
+        existing_envs = env_manager.list_conda_environments()
+        existing_names = [env['name'] for env in existing_envs]
+        env_lookup = {env['name']: env for env in existing_envs}
+
         dialog = tk.Toplevel(self.root)
         dialog.title("创建Conda环境")
-        dialog.geometry("400x300")
+        dialog.geometry("620x640")
         dialog.transient(self.root)
         dialog.grab_set()
-        
-        # 环境名称
-        ttk.Label(dialog, text="环境名称:").grid(row=0, column=0, sticky='w', padx=10, pady=5)
+        dialog.resizable(False, False)
+
+        create_mode_var = tk.StringVar(value="python")
+        clone_python_var = tk.BooleanVar(value=True)
+        clone_packages_var = tk.BooleanVar(value=True)
+        explicit_packages_only_var = tk.BooleanVar(value=False)
+        source_env_var = tk.StringVar()
         name_var = tk.StringVar()
-        ttk.Entry(dialog, textvariable=name_var).grid(row=0, column=1, padx=10, pady=5, sticky='ew')
-        
-        # Python版本
-        ttk.Label(dialog, text="Python版本:").grid(row=1, column=0, sticky='w', padx=10, pady=5)
-        python_var = ttk.Combobox(dialog, values=[
+        hint_var = tk.StringVar()
+        source_info_var = tk.StringVar(value="源环境信息: 未选择")
+        summary_var = tk.StringVar()
+        busy_state = {"running": False}
+
+        header = ttk.Frame(dialog, padding=(16, 16, 16, 8))
+        header.pack(fill='x')
+        ttk.Label(header, text="创建 Conda 环境", style='Title.TLabel').pack(anchor='w')
+        ttk.Label(header, text="支持空环境创建、部分克隆和完整克隆。", style='Subtitle.TLabel').pack(anchor='w', pady=(4, 0))
+
+        content = ttk.Frame(dialog, padding=(16, 0, 16, 12))
+        content.pack(fill='both', expand=True)
+
+        common_frame = ttk.LabelFrame(content, text="基础信息", padding=12)
+        common_frame.pack(fill='x', pady=(0, 10))
+        common_frame.columnconfigure(1, weight=1)
+
+        ttk.Label(common_frame, text="创建方式:").grid(row=0, column=0, sticky='w', padx=(0, 10), pady=5)
+        mode_frame = ttk.Frame(common_frame)
+        mode_frame.grid(row=0, column=1, sticky='w', pady=5)
+        ttk.Radiobutton(mode_frame, text="按 Python 版本创建", variable=create_mode_var, value="python").pack(side='left')
+        ttk.Radiobutton(mode_frame, text="基于已有环境创建", variable=create_mode_var, value="clone").pack(side='left', padx=(12, 0))
+
+        ttk.Label(common_frame, text="环境名称:").grid(row=1, column=0, sticky='w', padx=(0, 10), pady=5)
+        ttk.Entry(common_frame, textvariable=name_var).grid(row=1, column=1, sticky='ew', pady=5)
+
+        python_frame = ttk.LabelFrame(content, text="按版本创建", padding=12)
+        python_frame.pack(fill='x', pady=(0, 10))
+        python_frame.columnconfigure(1, weight=1)
+
+        ttk.Label(python_frame, text="Python版本:").grid(row=0, column=0, sticky='w', padx=(0, 10), pady=5)
+        python_var = ttk.Combobox(python_frame, values=[
             "3.14", "3.13", "3.12", "3.11", "3.10", "3.9"
-        ])
+        ], state="readonly")
         python_var.set("3.13")
-        python_var.grid(row=1, column=1, padx=10, pady=5, sticky='ew')
-        
-        # 包列表
-        ttk.Label(dialog, text="额外包 (可选):").grid(row=2, column=0, sticky='w', padx=10, pady=5)
-        packages_text = tk.Text(dialog, height=5)
-        packages_text.grid(row=3, column=0, columnspan=2, padx=10, pady=5, sticky='ew')
-        
+        python_var.grid(row=0, column=1, sticky='ew', pady=5)
+
+        ttk.Label(python_frame, text="额外包:").grid(row=1, column=0, sticky='nw', padx=(0, 10), pady=5)
+        packages_text = tk.Text(python_frame, height=5, relief='solid', borderwidth=1)
+        packages_text.grid(row=1, column=1, sticky='ew', pady=5)
+        ttk.Label(python_frame, text="每行一个包名，例如 numpy 或 pandas。", foreground="gray").grid(
+            row=2, column=1, sticky='w', pady=(0, 2)
+        )
+
+        clone_frame = ttk.LabelFrame(content, text="基于已有环境创建", padding=12)
+        clone_frame.pack(fill='x')
+        clone_frame.columnconfigure(1, weight=1)
+
+        ttk.Label(clone_frame, text="源环境:").grid(row=0, column=0, sticky='w', padx=(0, 10), pady=5)
+        source_env_combo = ttk.Combobox(clone_frame, textvariable=source_env_var, values=existing_names, state="readonly")
+        if existing_names:
+            source_env_combo.set(existing_names[0])
+        source_env_combo.grid(row=0, column=1, sticky='ew', pady=5)
+
+        ttk.Label(clone_frame, textvariable=source_info_var, foreground="gray").grid(
+            row=1, column=0, columnspan=2, sticky='w', pady=(0, 6)
+        )
+
+        options_frame = ttk.Frame(clone_frame)
+        options_frame.grid(row=2, column=0, columnspan=2, sticky='w', pady=5)
+        ttk.Label(options_frame, text="克隆内容:").pack(side='left', padx=(0, 10))
+        ttk.Checkbutton(options_frame, text="Python版本", variable=clone_python_var).pack(side='left')
+        ttk.Checkbutton(options_frame, text="已安装库", variable=clone_packages_var).pack(side='left', padx=(12, 0))
+
+        ttk.Label(clone_frame, text="目标Python版本:").grid(row=3, column=0, sticky='w', padx=(0, 10), pady=5)
+        clone_python_var_combo = ttk.Combobox(clone_frame, values=[
+            "3.14", "3.13", "3.12", "3.11", "3.10", "3.9"
+        ], state="readonly")
+        clone_python_var_combo.set("3.13")
+        clone_python_var_combo.grid(row=3, column=1, sticky='ew', pady=5)
+
+        ttk.Label(clone_frame, text="仅在未勾选“Python版本”且勾选“已安装库”时生效。", foreground="gray").grid(
+            row=4, column=0, columnspan=2, sticky='w', pady=(0, 2)
+        )
+
+        explicit_packages_check = ttk.Checkbutton(
+            clone_frame,
+            text="仅导出显式安装包（推荐，降低依赖冲突）",
+            variable=explicit_packages_only_var
+        )
+        explicit_packages_check.grid(row=5, column=0, columnspan=2, sticky='w', pady=(6, 0))
+
+        ttk.Label(content, textvariable=hint_var, foreground="gray").pack(anchor='w', pady=(10, 0))
+
+        summary_frame = ttk.LabelFrame(content, text="预估执行动作", padding=12)
+        summary_frame.pack(fill='x', pady=(10, 0))
+        ttk.Label(
+            summary_frame,
+            textvariable=summary_var,
+            justify='left',
+            wraplength=560
+        ).pack(anchor='w', fill='x')
+
         # 按钮
-        button_frame = ttk.Frame(dialog)
-        button_frame.grid(row=4, column=0, columnspan=2, pady=10)
-        
+        button_frame = ttk.Frame(dialog, padding=(16, 10, 16, 16))
+        button_frame.pack(fill='x')
+
+        create_button = ttk.Button(button_frame, text="创建")
+        cancel_button = ttk.Button(button_frame, text="取消", command=dialog.destroy)
+        refresh_button = ttk.Button(button_frame, text="刷新环境列表", command=lambda: [dialog.destroy(), self.create_conda_env()])
+
+        create_button.pack(side='left', padx=5)
+        cancel_button.pack(side='left', padx=5)
+        refresh_button.pack(side='right', padx=5)
+
+        def get_source_python_version():
+            source_env = env_lookup.get(source_env_var.get())
+            if not source_env:
+                return ""
+            return source_env.get("python_version", "").strip()
+
+        def set_dialog_busy(running):
+            busy_state["running"] = running
+            create_button.configure(state="disabled" if running else "normal")
+            cancel_button.configure(state="disabled" if running else "normal")
+            refresh_button.configure(state="disabled" if running else "normal")
+            dialog.configure(cursor="watch" if running else "")
+
+        def update_source_info(*_args):
+            source_env = env_lookup.get(source_env_var.get())
+            if not source_env:
+                source_info_var.set("源环境信息: 未选择")
+                return
+            source_info_var.set(
+                f"源环境信息: Python {source_env.get('python_version', 'Unknown')} | {source_env.get('path', '')}"
+            )
+
+        def update_create_mode(*_args):
+            mode = create_mode_var.get()
+            if mode == "clone":
+                python_var.configure(state="disabled")
+                packages_text.configure(state="disabled")
+                source_env_combo.configure(state="readonly")
+                if existing_names and not source_env_var.get():
+                    source_env_combo.set(existing_names[0])
+                update_clone_options()
+            else:
+                python_var.configure(state="readonly")
+                packages_text.configure(state="normal")
+                source_env_combo.configure(state="disabled")
+                clone_python_var_combo.configure(state="disabled")
+                explicit_packages_check.configure(state="disabled")
+                for child in options_frame.winfo_children():
+                    if isinstance(child, ttk.Checkbutton):
+                        child.configure(state="disabled")
+                hint_var.set("按 Python 版本创建时，可额外输入需要安装的包，每行一个。")
+            update_summary()
+
+        def update_clone_options(*_args):
+            if create_mode_var.get() != "clone":
+                update_summary()
+                return
+
+            has_source_envs = bool(existing_names)
+            if not has_source_envs:
+                source_env_combo.configure(state="disabled")
+                clone_python_var_combo.configure(state="disabled")
+                explicit_packages_check.configure(state="disabled")
+                hint_var.set("当前没有可克隆的 conda 环境。")
+                update_summary()
+                return
+
+            source_env_combo.configure(state="readonly")
+            for child in options_frame.winfo_children():
+                if isinstance(child, ttk.Checkbutton):
+                    child.configure(state="normal")
+
+            source_python_version = get_source_python_version()
+            if source_python_version and source_python_version != "Unknown":
+                clone_python_var_combo.set(source_python_version)
+
+            if clone_python_var.get() and clone_packages_var.get():
+                clone_python_var_combo.configure(state="disabled")
+                explicit_packages_check.configure(state="disabled")
+                explicit_packages_only_var.set(False)
+                hint_var.set("完整克隆：复制源环境的 Python 版本和全部已安装库。")
+            elif clone_python_var.get():
+                clone_python_var_combo.configure(state="disabled")
+                explicit_packages_check.configure(state="disabled")
+                explicit_packages_only_var.set(False)
+                hint_var.set("仅克隆 Python 版本：新环境只保留与源环境相同的 Python 版本。")
+            elif clone_packages_var.get():
+                clone_python_var_combo.configure(state="readonly")
+                explicit_packages_check.configure(state="normal")
+                hint_var.set("仅克隆已安装库：可指定目标 Python 版本，再迁移源环境中的库。")
+            else:
+                clone_python_var_combo.configure(state="disabled")
+                explicit_packages_check.configure(state="disabled")
+                explicit_packages_only_var.set(False)
+                hint_var.set("请至少选择一项克隆内容。")
+            update_summary()
+
+        def update_summary(*_args):
+            name = name_var.get().strip() or "<未命名>"
+            lines = [f"目标环境: {name}"]
+
+            if create_mode_var.get() == "python":
+                packages = [
+                    pkg.strip() for pkg in packages_text.get('1.0', tk.END).splitlines() if pkg.strip()
+                ]
+                lines.append("模式: 按 Python 版本创建")
+                lines.append(f"Python版本: {python_var.get().strip() or '未选择'}")
+                if packages:
+                    lines.append(f"额外安装包: {', '.join(packages)}")
+                else:
+                    lines.append("额外安装包: 无")
+                lines.append("预估动作: conda create 新环境，并按列表安装额外包。")
+            else:
+                source_name = source_env_var.get().strip() or "<未选择>"
+                lines.append("模式: 基于已有环境创建")
+                lines.append(f"源环境: {source_name}")
+
+                clone_targets = []
+                if clone_python_var.get():
+                    clone_targets.append("Python版本")
+                if clone_packages_var.get():
+                    clone_targets.append("已安装库")
+                lines.append(f"克隆内容: {', '.join(clone_targets) if clone_targets else '未选择'}")
+
+                if clone_python_var.get() and clone_packages_var.get():
+                    lines.append("预估动作: 使用 conda clone 直接完整复制源环境。")
+                elif clone_python_var.get():
+                    lines.append(f"目标Python版本: {get_source_python_version() or '自动读取源环境'}")
+                    lines.append("预估动作: 创建仅包含同版本 Python 的新环境。")
+                elif clone_packages_var.get():
+                    lines.append(f"目标Python版本: {clone_python_var_combo.get().strip() or '未选择'}")
+                    export_mode = "只导出显式安装包" if explicit_packages_only_var.get() else "导出完整环境依赖"
+                    lines.append(f"导出策略: {export_mode}")
+                    lines.append("预估动作: 导出源环境依赖配置，重写目标名称和 Python 版本后创建环境。")
+                else:
+                    lines.append("预估动作: 请至少选择一项克隆内容。")
+
+            summary_var.set("\n".join(lines))
+
+        create_mode_var.trace_add("write", update_create_mode)
+        source_env_var.trace_add("write", update_source_info)
+        source_env_var.trace_add("write", update_clone_options)
+        clone_python_var.trace_add("write", update_clone_options)
+        clone_packages_var.trace_add("write", update_clone_options)
+        explicit_packages_only_var.trace_add("write", update_summary)
+        name_var.trace_add("write", update_summary)
+        python_var.bind("<<ComboboxSelected>>", update_summary)
+        clone_python_var_combo.bind("<<ComboboxSelected>>", update_summary)
+        packages_text.bind("<KeyRelease>", update_summary)
+
+        def close_dialog():
+            if busy_state["running"]:
+                return
+            dialog.destroy()
+
+        cancel_button.configure(command=close_dialog)
+        dialog.protocol("WM_DELETE_WINDOW", close_dialog)
+
         def create():
+            if busy_state["running"]:
+                return
+
             name = name_var.get().strip()
-            python = python_var.get()
-            packages = packages_text.get('1.0', tk.END).strip()
-            
+            mode = create_mode_var.get()
+
             if not name:
                 messagebox.showerror("错误", "请输入环境名称")
                 return
-            
-            try:
-                from environment_manager import EnvironmentManager
-                
-                # 创建环境管理器
-                env_manager = EnvironmentManager(self.config.get('miniconda_path', ''))
-                
-                # 准备包列表
-                package_list = []
-                if packages:
-                    for pkg in packages.split('\n'):
-                        pkg = pkg.strip()
-                        if pkg:
-                            package_list.append(pkg)
-                
-                # 创建环境
-                success, message = env_manager.create_conda_environment(name, python, package_list)
-                
-                if success:
-                    messagebox.showinfo("成功", message)
-                    dialog.destroy()
-                    self.refresh_conda_envs()
-                else:
-                    messagebox.showerror("错误", message)
-                    
-            except Exception as e:
-                messagebox.showerror("错误", f"创建环境失败: {e}")
-        
-        ttk.Button(button_frame, text="创建", command=create).pack(side='left', padx=5)
-        ttk.Button(button_frame, text="取消", command=dialog.destroy).pack(side='left', padx=5)
-        
-        dialog.columnconfigure(1, weight=1)
+
+            if name in existing_names:
+                messagebox.showerror("错误", f"环境 '{name}' 已存在")
+                return
+
+            action = {"name": name, "mode": mode}
+
+            if mode == "clone":
+                source_name = source_env_var.get().strip()
+                if not source_name:
+                    messagebox.showerror("错误", "请选择源环境")
+                    return
+
+                if not clone_python_var.get() and not clone_packages_var.get():
+                    messagebox.showerror("错误", "请至少选择一项克隆内容")
+                    return
+
+                target_python_version = None
+                if not clone_python_var.get() and clone_packages_var.get():
+                    target_python_version = clone_python_var_combo.get().strip()
+                    if not target_python_version:
+                        messagebox.showerror("错误", "请选择目标 Python 版本")
+                        return
+
+                action.update({
+                    "source_name": source_name,
+                    "clone_python": clone_python_var.get(),
+                    "clone_packages": clone_packages_var.get(),
+                    "target_python_version": target_python_version,
+                    "explicit_packages_only": explicit_packages_only_var.get()
+                })
+            else:
+                python = python_var.get().strip()
+                packages = [
+                    pkg.strip() for pkg in packages_text.get('1.0', tk.END).splitlines() if pkg.strip()
+                ]
+                action.update({
+                    "python": python,
+                    "packages": packages
+                })
+
+            def worker():
+                try:
+                    if action["mode"] == "clone":
+                        success, message = env_manager.clone_conda_environment(
+                            action["source_name"],
+                            action["name"],
+                            clone_python=action["clone_python"],
+                            clone_packages=action["clone_packages"],
+                            target_python_version=action["target_python_version"],
+                            explicit_packages_only=action["explicit_packages_only"]
+                        )
+                    else:
+                        success, message = env_manager.create_conda_environment(
+                            action["name"],
+                            action["python"],
+                            action["packages"]
+                        )
+                except Exception as e:
+                    success, message = False, f"创建环境失败: {e}"
+
+                def finish():
+                    set_dialog_busy(False)
+                    self.stop_progress()
+                    self.update_status("就绪")
+                    if success:
+                        messagebox.showinfo("成功", message)
+                        dialog.destroy()
+                        self.refresh_conda_envs()
+                    else:
+                        messagebox.showerror("错误", message)
+
+                self.root.after(0, finish)
+
+            set_dialog_busy(True)
+            self.update_status(f"正在创建环境 '{name}'...")
+            self.start_progress()
+            threading.Thread(target=worker, daemon=True).start()
+
+        create_button.configure(command=create)
+
+        update_source_info()
+        update_create_mode()
+        update_summary()
     
     def delete_conda_env(self):
         """删除Conda环境"""

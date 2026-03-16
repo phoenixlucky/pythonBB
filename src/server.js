@@ -1,0 +1,195 @@
+import fs from "node:fs/promises";
+import http from "node:http";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  createCondaEnvironment,
+  createVirtualEnvironment,
+  deleteCondaEnvironment,
+  deleteVirtualEnvironment,
+  discoverPythonVersions,
+  listCondaEnvironments,
+  listVirtualEnvironments
+} from "./services/environment-service.js";
+import {
+  installFromRequirements,
+  installPackage,
+  listPackages,
+  showPackageInfo,
+  uninstallPackage,
+  upgradePip
+} from "./services/package-service.js";
+import { getSystemOverview } from "./services/system-service.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const projectRoot = path.resolve(__dirname, "..");
+const publicDir = path.join(projectRoot, "public");
+const PORT = Number(process.env.PORT || 3210);
+
+function sendJson(response, statusCode, payload) {
+  response.writeHead(statusCode, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store, no-cache, must-revalidate"
+  });
+  response.end(JSON.stringify(payload));
+}
+
+async function readBody(request) {
+  const chunks = [];
+  for await (const chunk of request) {
+    chunks.push(chunk);
+  }
+  if (!chunks.length) {
+    return {};
+  }
+  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+}
+
+async function serveStatic(response, pathname) {
+  const safePath = pathname === "/" ? "/index.html" : pathname;
+  const filePath = path.join(publicDir, safePath);
+  if (!filePath.startsWith(publicDir)) {
+    sendJson(response, 403, { error: "Forbidden" });
+    return;
+  }
+
+  try {
+    const content = await fs.readFile(filePath);
+    const typeMap = {
+      ".html": "text/html; charset=utf-8",
+      ".css": "text/css; charset=utf-8",
+      ".js": "application/javascript; charset=utf-8",
+      ".json": "application/json; charset=utf-8"
+    };
+    response.writeHead(200, {
+      "Content-Type": typeMap[path.extname(filePath)] || "application/octet-stream",
+      "Cache-Control": "no-store, no-cache, must-revalidate"
+    });
+    response.end(content);
+  } catch {
+    sendJson(response, 404, { error: "Not found" });
+  }
+}
+
+function parseTarget(target) {
+  if (!target?.type) {
+    throw new Error("缺少环境目标信息");
+  }
+  return target;
+}
+
+async function handleApi(request, response, pathname, searchParams) {
+  const preferredCondaRoot = searchParams.get("condaRoot") || "";
+
+  try {
+    if (request.method === "GET" && pathname === "/api/health") {
+      sendJson(response, 200, { ok: true });
+      return;
+    }
+
+    if (request.method === "GET" && pathname === "/api/overview") {
+      sendJson(response, 200, await getSystemOverview(preferredCondaRoot));
+      return;
+    }
+
+    if (request.method === "GET" && pathname === "/api/python/versions") {
+      sendJson(response, 200, await discoverPythonVersions());
+      return;
+    }
+
+    if (request.method === "GET" && pathname === "/api/conda/environments") {
+      sendJson(response, 200, await listCondaEnvironments(preferredCondaRoot));
+      return;
+    }
+
+    if (request.method === "POST" && pathname === "/api/conda/environments") {
+      sendJson(response, 200, await createCondaEnvironment(await readBody(request), preferredCondaRoot));
+      return;
+    }
+
+    if (request.method === "DELETE" && pathname.startsWith("/api/conda/environments/")) {
+      const name = decodeURIComponent(pathname.split("/").pop());
+      sendJson(response, 200, await deleteCondaEnvironment(name, preferredCondaRoot));
+      return;
+    }
+
+    if (request.method === "GET" && pathname === "/api/venvs") {
+      sendJson(response, 200, await listVirtualEnvironments(searchParams.get("lastDirectory") || undefined));
+      return;
+    }
+
+    if (request.method === "POST" && pathname === "/api/venvs") {
+      sendJson(response, 200, await createVirtualEnvironment(await readBody(request)));
+      return;
+    }
+
+    if (request.method === "DELETE" && pathname === "/api/venvs") {
+      sendJson(response, 200, await deleteVirtualEnvironment(searchParams.get("path")));
+      return;
+    }
+
+    if (request.method === "POST" && pathname === "/api/packages/list") {
+      const body = await readBody(request);
+      sendJson(response, 200, await listPackages(parseTarget(body.target), preferredCondaRoot));
+      return;
+    }
+
+    if (request.method === "POST" && pathname === "/api/packages/install") {
+      const body = await readBody(request);
+      sendJson(
+        response,
+        200,
+        await installPackage(parseTarget(body.target), body.packageName, Boolean(body.upgrade), preferredCondaRoot)
+      );
+      return;
+    }
+
+    if (request.method === "POST" && pathname === "/api/packages/uninstall") {
+      const body = await readBody(request);
+      sendJson(response, 200, await uninstallPackage(parseTarget(body.target), body.packageName, preferredCondaRoot));
+      return;
+    }
+
+    if (request.method === "POST" && pathname === "/api/packages/show") {
+      const body = await readBody(request);
+      sendJson(response, 200, await showPackageInfo(parseTarget(body.target), body.packageName, preferredCondaRoot));
+      return;
+    }
+
+    if (request.method === "POST" && pathname === "/api/packages/upgrade-pip") {
+      const body = await readBody(request);
+      sendJson(response, 200, await upgradePip(parseTarget(body.target), preferredCondaRoot));
+      return;
+    }
+
+    if (request.method === "POST" && pathname === "/api/packages/install-requirements") {
+      const body = await readBody(request);
+      sendJson(
+        response,
+        200,
+        await installFromRequirements(parseTarget(body.target), body.requirementsPath, preferredCondaRoot)
+      );
+      return;
+    }
+
+    sendJson(response, 404, { error: "API not found" });
+  } catch (error) {
+    sendJson(response, 500, { error: error.message || "Server error" });
+  }
+}
+
+const server = http.createServer(async (request, response) => {
+  const requestUrl = new URL(request.url, `http://${request.headers.host}`);
+
+  if (requestUrl.pathname.startsWith("/api/")) {
+    await handleApi(request, response, requestUrl.pathname, requestUrl.searchParams);
+    return;
+  }
+
+  await serveStatic(response, requestUrl.pathname);
+});
+
+server.listen(PORT, () => {
+  console.log(`PythonBB Web 已启动: http://localhost:${PORT}`);
+});

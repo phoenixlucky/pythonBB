@@ -8,6 +8,7 @@ import os
 import sys
 import subprocess
 import json
+import tempfile
 from pathlib import Path
 import shutil
 
@@ -161,6 +162,148 @@ class EnvironmentManager:
             return True, f"环境 '{name}' 创建成功"
         else:
             return False, f"创建失败: {stderr}"
+
+    def get_conda_environment(self, name):
+        """根据名称获取conda环境信息"""
+        for env in self.list_conda_environments():
+            if env["name"] == name:
+                return env
+        return None
+
+    def export_conda_environment(self, name, explicit_only=False):
+        """导出conda环境配置"""
+        if not self.is_conda_available():
+            return False, "", "Conda not available"
+
+        cmd = ["env", "export", "-n", name]
+        if explicit_only:
+            cmd.append("--from-history")
+        else:
+            cmd.append("--no-builds")
+
+        success, stdout, stderr = self.run_conda_command(cmd)
+        return success, stdout, stderr
+
+    def _rewrite_exported_environment(self, exported_yaml, target_name, python_version=None):
+        """重写导出的环境配置"""
+        lines = exported_yaml.splitlines()
+        rewritten_lines = []
+        dependencies_index = None
+        python_written = False
+
+        for line in lines:
+            stripped = line.strip()
+
+            if stripped.startswith("name:"):
+                rewritten_lines.append(f"name: {target_name}")
+                continue
+
+            if stripped.startswith("prefix:"):
+                continue
+
+            if stripped == "dependencies:":
+                dependencies_index = len(rewritten_lines)
+                rewritten_lines.append(line)
+                continue
+
+            if python_version and stripped.startswith("- python="):
+                indent = line[:len(line) - len(line.lstrip())]
+                rewritten_lines.append(f"{indent}- python={python_version}")
+                python_written = True
+                continue
+
+            rewritten_lines.append(line)
+
+        if python_version and not python_written:
+            dependency_line = f"  - python={python_version}"
+            if dependencies_index is None:
+                rewritten_lines.append("dependencies:")
+                rewritten_lines.append(dependency_line)
+            else:
+                rewritten_lines.insert(dependencies_index + 1, dependency_line)
+
+        return "\n".join(rewritten_lines) + "\n"
+
+    def create_conda_environment_from_export(self, target_name, exported_yaml, python_version=None):
+        """根据导出的环境配置创建新环境"""
+        if not self.is_conda_available():
+            return False, "Conda not available"
+
+        env_yaml = self._rewrite_exported_environment(exported_yaml, target_name, python_version)
+        temp_path = None
+
+        try:
+            with tempfile.NamedTemporaryFile("w", suffix=".yml", delete=False, encoding="utf-8") as temp_file:
+                temp_file.write(env_yaml)
+                temp_path = temp_file.name
+
+            success, stdout, stderr = self.run_conda_command(["env", "create", "-f", temp_path])
+
+            if success:
+                return True, f"环境 '{target_name}' 创建成功"
+            return False, f"创建失败: {stderr}"
+        except Exception as e:
+            return False, f"创建失败: {e}"
+        finally:
+            if temp_path:
+                try:
+                    Path(temp_path).unlink(missing_ok=True)
+                except Exception:
+                    pass
+
+    def clone_conda_environment(
+        self,
+        source_name,
+        target_name,
+        clone_python=True,
+        clone_packages=True,
+        target_python_version=None,
+        explicit_packages_only=False
+    ):
+        """基于已有conda环境克隆新环境"""
+        if not self.is_conda_available():
+            return False, "Conda not available"
+
+        if not source_name:
+            return False, "请选择源环境"
+
+        if source_name == target_name:
+            return False, "新环境名称不能与源环境相同"
+
+        if not clone_python and not clone_packages:
+            return False, "请至少选择一项克隆内容"
+
+        source_env = self.get_conda_environment(source_name)
+        if not source_env:
+            return False, f"未找到源环境 '{source_name}'"
+
+        source_python_version = source_env.get("python_version", "").strip()
+        if source_python_version == "Unknown":
+            source_python_version = ""
+
+        if clone_python and clone_packages:
+            success, stdout, stderr = self.run_conda_command(
+                ["create", "-n", target_name, "--clone", source_name, "-y"]
+            )
+
+            if success:
+                return True, f"环境 '{target_name}' 已基于 '{source_name}' 完整克隆成功"
+            return False, f"创建失败: {stderr}"
+
+        if clone_python and not clone_packages:
+            if not source_python_version:
+                return False, "无法获取源环境的 Python 版本"
+            return self.create_conda_environment(target_name, source_python_version)
+
+        success, exported_yaml, stderr = self.export_conda_environment(
+            source_name,
+            explicit_only=explicit_packages_only
+        )
+        if not success:
+            return False, f"导出环境失败: {stderr}"
+
+        python_version = target_python_version or source_python_version or "3.11"
+        return self.create_conda_environment_from_export(target_name, exported_yaml, python_version=python_version)
     
     def delete_conda_environment(self, name):
         """删除conda环境"""
