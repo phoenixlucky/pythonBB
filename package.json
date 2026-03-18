@@ -1,9 +1,66 @@
 {
   "name": "pythonbb-web",
-  "version": "2.0.0",
+  "version": "2.0.3",
   "private": true,
+  "description": "Python and Conda environment manager desktop app",
+  "author": "WeiPython",
   "type": "module",
+  "main": "electron/main.js",
   "scripts": {
-    "web": "node src/server.js"
+    "web": "node src/server.js",
+    "desktop": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "^35.0.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.weipython.desktop",
+    "productName": "尉Python环境管理器",
+    "executableName": "WeiPython",
+    "icon": "build/icon.ico",
+    "asar": true,
+    "npmRebuild": false,
+    "electronDist": "node_modules/electron/dist",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "public/**/*",
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "WeiPython-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "selectPerMachineByDefault": true,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "尉Python环境管理器",
+      "uninstallDisplayName": "尉Python环境管理器",
+      "installerIcon": "build/installerIcon.ico",
+      "uninstallerIcon": "build/uninstallerIcon.ico",
+      "installerHeaderIcon": "build/installerHeaderIcon.ico",
+      "installerHeader": "build/installerHeader.bmp",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "uninstallerSidebar": "build/installerSidebar.bmp",
+      "include": "build/installer.nsh",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
   }
 }

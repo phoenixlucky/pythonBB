@@ -26,7 +26,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, "..");
 const publicDir = path.join(projectRoot, "public");
-const PORT = Number(process.env.PORT || 3210);
+const DEFAULT_PORT = Number(process.env.PORT || 3210);
 
 function sendJson(response, statusCode, payload) {
   response.writeHead(statusCode, {
@@ -186,17 +186,49 @@ async function handleApi(request, response, pathname, searchParams) {
   }
 }
 
-const server = http.createServer(async (request, response) => {
-  const requestUrl = new URL(request.url, `http://${request.headers.host}`);
+export function createServer() {
+  return http.createServer(async (request, response) => {
+    const requestUrl = new URL(request.url, `http://${request.headers.host}`);
 
-  if (requestUrl.pathname.startsWith("/api/")) {
-    await handleApi(request, response, requestUrl.pathname, requestUrl.searchParams);
-    return;
-  }
+    if (requestUrl.pathname.startsWith("/api/")) {
+      await handleApi(request, response, requestUrl.pathname, requestUrl.searchParams);
+      return;
+    }
 
-  await serveStatic(response, requestUrl.pathname);
-});
+    await serveStatic(response, requestUrl.pathname);
+  });
+}
 
-server.listen(PORT, () => {
-  console.log(`PythonBB Web 已启动: http://localhost:${PORT}`);
-});
+export function startServer({ port = DEFAULT_PORT, host = "127.0.0.1" } = {}) {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+
+    server.once("error", (error) => {
+      reject(error);
+    });
+
+    server.listen(port, host, () => {
+      const address = server.address();
+      const actualPort = typeof address === "object" && address ? address.port : port;
+      resolve({
+        server,
+        host,
+        port: actualPort,
+        url: `http://${host}:${actualPort}`
+      });
+    });
+  });
+}
+
+const isMainModule = process.argv[1] && path.resolve(process.argv[1]) === __filename;
+
+if (isMainModule) {
+  startServer()
+    .then(({ url }) => {
+      console.log(`PythonBB Web 已启动: ${url}`);
+    })
+    .catch((error) => {
+      console.error(error);
+      process.exitCode = 1;
+    });
+}
