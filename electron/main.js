@@ -1,8 +1,90 @@
-import { app, BrowserWindow, dialog } from "electron";
+import { app, BrowserWindow, dialog, Menu } from "electron";
 import { startServer } from "../src/server.js";
 
 let mainWindow = null;
 let serverHandle = null;
+
+const APP_NAME = "尉Python环境管理器";
+const APP_AUTHOR = "WeiPython";
+const APP_DESCRIPTION =
+  "一个面向 Windows 的本地桌面工具，用于集中管理 Python、Conda、venv 与 pip 包操作。";
+const APP_FEATURES = [
+  "扫描系统中的 Python 版本",
+  "检测 Conda / Miniconda 与环境列表",
+  "创建、克隆、导入、导出、删除 Conda 环境",
+  "查看并管理不同环境中的 Python 包"
+];
+
+function getAboutMessage() {
+  return [
+    `软件名称：${APP_NAME}`,
+    `版本：${app.getVersion()}`,
+    `作者：${APP_AUTHOR}`,
+    "",
+    "软件简介：",
+    APP_DESCRIPTION,
+    "",
+    "主要功能：",
+    ...APP_FEATURES.map((feature) => `- ${feature}`)
+  ].join("\n");
+}
+
+async function showAboutDialog() {
+  const version = app.getVersion();
+  await dialog.showMessageBox(mainWindow, {
+    type: "info",
+    title: `关于 ${APP_NAME}`,
+    message: `${APP_NAME} v${version}`,
+    detail: getAboutMessage(),
+    buttons: ["确定"]
+  });
+}
+
+function buildApplicationMenu() {
+  const isMac = process.platform === "darwin";
+  const template = [
+    ...(isMac
+      ? [
+          {
+            label: app.getName(),
+            submenu: [
+              {
+                label: `关于 ${APP_NAME}`,
+                click: () => {
+                  void showAboutDialog();
+                }
+              },
+              { type: "separator" },
+              { role: "services" },
+              { type: "separator" },
+              { role: "hide" },
+              { role: "hideOthers" },
+              { role: "unhide" },
+              { type: "separator" },
+              { role: "quit" }
+            ]
+          }
+        ]
+      : []),
+    {
+      label: "窗口",
+      submenu: [{ role: "reload" }, { role: "toggledevtools" }, { type: "separator" }, { role: "minimize" }]
+    },
+    {
+      label: "帮助",
+      submenu: [
+        {
+          label: `关于 ${APP_NAME}`,
+          click: () => {
+            void showAboutDialog();
+          }
+        }
+      ]
+    }
+  ];
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
 
 async function createMainWindow() {
   serverHandle = await startServer({ port: 0 });
@@ -12,8 +94,8 @@ async function createMainWindow() {
     height: 960,
     minWidth: 1100,
     minHeight: 720,
-    autoHideMenuBar: true,
-    title: "尉Python环境管理器",
+    autoHideMenuBar: false,
+    title: APP_NAME,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false
@@ -34,18 +116,19 @@ async function createMainWindow() {
 
 async function bootstrap() {
   try {
+    buildApplicationMenu();
     await createMainWindow();
   } catch (error) {
     await dialog.showMessageBox({
       type: "error",
-      title: "尉Python环境管理器启动失败",
+      title: `${APP_NAME}启动失败`,
       message: error.message || "无法启动桌面应用"
     });
     app.quit();
   }
 }
 
-app.setName("尉Python环境管理器");
+app.setName(APP_NAME);
 app.whenReady().then(bootstrap);
 
 app.on("activate", async () => {
