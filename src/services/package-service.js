@@ -1,5 +1,5 @@
 import { runCommand } from "../utils/process.js";
-import { resolvePythonExecutable } from "./environment-service.js";
+import { resolvePythonExecutable, runCondaCommand } from "./environment-service.js";
 
 const latestVersionCache = new Map();
 const LATEST_VERSION_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -26,6 +26,19 @@ export async function installPackage(target, packageName, upgrade = false, prefe
     throw new Error(result.stderr || "安装包失败");
   }
   return { message: `包 '${packageName}' 安装成功` };
+}
+
+async function listOutdatedPackages(pythonExecutable) {
+  const result = await runCommand(
+    pythonExecutable,
+    ["-m", "pip", "list", "--outdated", "--format=json"],
+    { timeoutMs: 30000 }
+  );
+  if (!result.ok) {
+    throw new Error(result.stderr || "获取可升级包列表失败");
+  }
+
+  return JSON.parse(result.stdout || "[]");
 }
 
 export async function uninstallPackage(target, packageName, preferredRoot = "") {
@@ -102,6 +115,55 @@ export async function getLatestPackageVersion(packageName) {
 
 export async function upgradePip(target, preferredRoot = "") {
   return installPackage(target, "pip", true, preferredRoot);
+}
+
+export async function upgradeAllPackages(target, preferredRoot = "") {
+  const pythonExecutable = await resolvePythonExecutable(target, preferredRoot);
+  const pipOutdated = await listOutdatedPackages(pythonExecutable);
+  let condaUpdated = false;
+
+  if (target.type === "conda") {
+    const condaResult = await runCondaCommand(["update", "-n", target.name, "--all", "-y"], preferredRoot);
+    if (!condaResult.ok) {
+      throw new Error(condaResult.stderr || condaResult.stdout || "Conda 批量升级失败");
+    }
+    condaUpdated = true;
+  }
+
+  const outdatedAfterConda = target.type === "conda" ? await listOutdatedPackages(pythonExecutable) : pipOutdated;
+  const packageNames = outdatedAfterConda.map((pkg) => pkg.name).filter(Boolean);
+
+  if (packageNames.length) {
+    const upgradeResult = await runCommand(
+      pythonExecutable,
+      ["-m", "pip", "install", "--upgrade", ...packageNames],
+      { timeoutMs: 300000 }
+    );
+    if (!upgradeResult.ok) {
+      throw new Error(upgradeResult.stderr || "pip 批量升级失败");
+    }
+  }
+
+  const upgradedNames = packageNames.join(", ");
+  const summary = [
+    `目标环境: ${target.type}${target.name ? ` / ${target.name}` : ""}`,
+    `Conda 全量升级: ${condaUpdated ? "已执行" : "未执行"}`,
+    `pip 可升级包数量: ${packageNames.length}`
+  ];
+
+  if (packageNames.length) {
+    summary.push(`pip 已升级包: ${upgradedNames}`);
+  } else {
+    summary.push("pip 已升级包: 无，当前已是最新");
+  }
+
+  return {
+    message: packageNames.length || condaUpdated ? "批量升级完成" : "当前环境中的包已是最新",
+    summary: summary.join("\n"),
+    upgradedPackages: packageNames,
+    upgradedCount: packageNames.length,
+    condaUpdated
+  };
 }
 
 export async function installFromRequirements(target, requirementsPath, preferredRoot = "") {

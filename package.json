@@ -1,6 +1,6 @@
 {
   "name": "pythonbb-web",
-  "version": "2.0.3",
+  "version": "2.0.4",
   "private": true,
   "description": "Python and Conda environment manager desktop app",
   "author": "WeiPython",

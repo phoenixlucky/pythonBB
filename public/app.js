@@ -40,7 +40,8 @@ const elements = {
   operationMessage: document.querySelector("#operationMessage"),
   operationDetails: document.querySelector("#operationDetails"),
   operationCloseButton: document.querySelector("#operationCloseButton"),
-  refreshInstalledPackagesButton: document.querySelector("#refreshInstalledPackagesButton")
+  refreshInstalledPackagesButton: document.querySelector("#refreshInstalledPackagesButton"),
+  upgradeAllPackagesButton: document.querySelector("#upgradeAllPackagesButton")
 };
 
 let confirmResolver = null;
@@ -560,11 +561,13 @@ async function runPackageAction(action, payload = {}) {
     list: "正在列出包...",
     "latest-version": "正在查询 PyPI 最新版本...",
     "upgrade-pip": "正在升级 pip...",
+    "upgrade-all": "正在批量升级环境中的全部包...",
     "install-requirements": "正在从 requirements 安装..."
   };
   const timeoutMap = {
     show: 12000,
-    "latest-version": 7000
+    "latest-version": 7000,
+    "upgrade-all": 300000
   };
 
   setBusy(actionMessageMap[action] || `正在执行包操作: ${action}`);
@@ -603,6 +606,10 @@ async function runPackageAction(action, payload = {}) {
 
     elements.packageResults.textContent = lines.join("\n");
     elements.packageResultMeta.textContent = "最新版本";
+  } else if (action === "upgrade-all") {
+    elements.packageResults.textContent = data.summary || data.message;
+    elements.packageResultMeta.textContent = `批量升级完成${typeof data.upgradedCount === "number" ? ` · ${data.upgradedCount} 个 pip 包` : ""}`;
+    await loadInstalledPackages({ silent: true });
   } else {
     elements.packageResults.textContent = data.message;
     elements.packageResultMeta.textContent = "操作完成";
@@ -732,6 +739,32 @@ function wirePackageActions() {
     runPackageAction("latest-version", { packageName: form.packageName.value })
   );
   document.querySelector("#upgradePipButton").addEventListener("click", () => runPackageAction("upgrade-pip"));
+  elements.upgradeAllPackagesButton.addEventListener("click", async () => {
+    const target = getSelectedTarget();
+    if (!target) {
+      setReady("请先选择目标环境。");
+      return;
+    }
+
+    const confirmed = await askConfirm({
+      title: "一键升级全部包",
+      message:
+        target.type === "conda"
+          ? `确定要升级 conda 环境 “${target.name}” 中的全部库吗？\n将先执行 conda update --all，再升级 pip 包。`
+          : "确定要升级当前目标环境中的全部 pip 包吗？",
+      confirmText: "确认升级"
+    });
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await runPackageAction("upgrade-all");
+    } catch (error) {
+      setReady(error.message);
+      alert(error.message);
+    }
+  });
   document.querySelector("#installRequirementsButton").addEventListener("click", () =>
     runPackageAction("install-requirements", { requirementsPath: form.requirementsPath.value })
   );

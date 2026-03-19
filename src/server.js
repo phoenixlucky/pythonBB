@@ -18,6 +18,7 @@ import {
   listPackages,
   showPackageInfo,
   uninstallPackage,
+  upgradeAllPackages,
   upgradePip
 } from "./services/package-service.js";
 import { getSystemOverview } from "./services/system-service.js";
@@ -167,6 +168,12 @@ async function handleApi(request, response, pathname, searchParams) {
     if (request.method === "POST" && pathname === "/api/packages/upgrade-pip") {
       const body = await readBody(request);
       sendJson(response, 200, await upgradePip(parseTarget(body.target), preferredCondaRoot));
+      return;
+    }
+
+    if (request.method === "POST" && pathname === "/api/packages/upgrade-all") {
+      const body = await readBody(request);
+      sendJson(response, 200, await upgradeAllPackages(parseTarget(body.target), preferredCondaRoot));
       return;
     }
 
