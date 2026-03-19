@@ -8,6 +8,8 @@ import {
   deleteCondaEnvironment,
   deleteVirtualEnvironment,
   discoverPythonVersions,
+  exportCondaEnvironmentToFile,
+  importCondaEnvironmentFromFile,
   listCondaEnvironments,
   listVirtualEnvironments
 } from "./services/environment-service.js";
@@ -107,6 +109,16 @@ async function handleApi(request, response, pathname, searchParams) {
 
     if (request.method === "POST" && pathname === "/api/conda/environments") {
       sendJson(response, 200, await createCondaEnvironment(await readBody(request), preferredCondaRoot));
+      return;
+    }
+
+    if (request.method === "POST" && pathname === "/api/conda/environments/export") {
+      sendJson(response, 200, await exportCondaEnvironmentToFile(await readBody(request), preferredCondaRoot));
+      return;
+    }
+
+    if (request.method === "POST" && pathname === "/api/conda/environments/import") {
+      sendJson(response, 200, await importCondaEnvironmentFromFile(await readBody(request), preferredCondaRoot));
       return;
     }
 

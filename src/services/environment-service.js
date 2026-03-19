@@ -343,6 +343,21 @@ function rewriteExportedEnvironment(content, targetName, pythonVersion) {
   return `${rewritten.join("\n").trim()}\n`;
 }
 
+async function ensureParentDirectory(targetPath) {
+  await fs.mkdir(path.dirname(targetPath), { recursive: true });
+}
+
+function normalizeEnvironmentFilePath(filePath) {
+  const normalized = String(filePath || "").trim();
+  if (!normalized) {
+    throw new Error("请填写环境文件路径");
+  }
+  if (!/\.ya?ml$/i.test(normalized)) {
+    throw new Error("环境文件必须是 .yml 或 .yaml");
+  }
+  return path.resolve(normalized);
+}
+
 export async function createCondaEnvironment(payload, preferredRoot = "") {
   const condaExecutable = await detectCondaExecutable(preferredRoot);
   if (!condaExecutable) {
@@ -454,6 +469,61 @@ export async function deleteCondaEnvironment(name, preferredRoot = "") {
     throw new Error(formatCondaFailure(result.stderr, result.stdout));
   }
   return { message: `环境 '${name}' 删除成功` };
+}
+
+export async function exportCondaEnvironmentToFile(payload, preferredRoot = "") {
+  const envName = String(payload?.sourceName || "").trim();
+  if (!envName) {
+    throw new Error("请选择要导出的 conda 环境");
+  }
+
+  const targetFile = normalizeEnvironmentFilePath(payload?.filePath);
+  const exportArgs = ["env", "export", "-n", envName];
+  exportArgs.push(payload?.explicitPackagesOnly ? "--from-history" : "--no-builds");
+
+  const exported = await runCondaCommand(exportArgs, preferredRoot);
+  if (!exported.ok) {
+    throw new Error(formatCondaFailure(exported.stderr, exported.stdout));
+  }
+
+  await ensureParentDirectory(targetFile);
+  await fs.writeFile(targetFile, exported.stdout, "utf8");
+
+  return {
+    message: `环境 '${envName}' 已导出到 ${targetFile}`,
+    filePath: targetFile
+  };
+}
+
+export async function importCondaEnvironmentFromFile(payload, preferredRoot = "") {
+  const envName = String(payload?.name || "").trim();
+  if (!envName) {
+    throw new Error("请填写新环境名称");
+  }
+
+  const sourceFile = normalizeEnvironmentFilePath(payload?.filePath);
+  const fileContent = await fs.readFile(sourceFile, "utf8");
+  const rewritten = rewriteExportedEnvironment(
+    fileContent,
+    envName,
+    payload?.pythonVersion ? resolveRequestedPythonVersion(payload.pythonVersion) : undefined
+  );
+  const tempFile = path.join(os.tmpdir(), `pythonbb-import-${Date.now()}-${envName}.yml`);
+
+  await fs.writeFile(tempFile, rewritten, "utf8");
+  try {
+    const result = await runCondaCommand(["env", "create", "-f", tempFile], preferredRoot);
+    if (!result.ok) {
+      throw new Error(formatCondaFailure(result.stderr, result.stdout));
+    }
+  } finally {
+    await fs.rm(tempFile, { force: true });
+  }
+
+  return {
+    message: `已根据环境文件创建 conda 环境 '${envName}'`,
+    sourceFile
+  };
 }
 
 export async function discoverPythonVersions() {

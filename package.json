@@ -1,6 +1,6 @@
 {
   "name": "pythonbb-web",
-  "version": "2.0.4",
+  "version": "2.1.0",
   "private": true,
   "description": "Python and Conda environment manager desktop app",
   "author": "WeiPython",
@@ -18,7 +18,7 @@
   },
   "build": {
     "appId": "com.weipython.desktop",
-    "productName": "尉Python环境管理器",
+    "productName": "WeiPython 环境管理器",
     "executableName": "WeiPython",
     "icon": "build/icon.ico",
     "asar": true,
@@ -50,8 +50,8 @@
       "perMachine": true,
       "selectPerMachineByDefault": true,
       "allowToChangeInstallationDirectory": true,
-      "shortcutName": "尉Python环境管理器",
-      "uninstallDisplayName": "尉Python环境管理器",
+      "shortcutName": "WeiPython 环境管理器",
+      "uninstallDisplayName": "WeiPython 环境管理器",
       "installerIcon": "build/installerIcon.ico",
       "uninstallerIcon": "build/uninstallerIcon.ico",
       "installerHeaderIcon": "build/installerHeaderIcon.ico",

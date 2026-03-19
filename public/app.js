@@ -25,6 +25,7 @@ const elements = {
   packageResults: document.querySelector("#packageResults"),
   packageResultMeta: document.querySelector("#packageResultMeta"),
   condaSourceSelect: document.querySelector("#condaSourceSelect"),
+  condaExportSourceSelect: document.querySelector("#condaExportSourceSelect"),
   condaModeSelect: document.querySelector("#condaModeSelect"),
   condaPythonFields: document.querySelector("#condaPythonFields"),
   condaCloneFields: document.querySelector("#condaCloneFields"),
@@ -54,6 +55,15 @@ function setBusy(message) {
 function setReady(message = "等待操作。") {
   elements.statusPill.textContent = "就绪";
   elements.globalMessage.textContent = message;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
 function askConfirm({ title, message, confirmText = "确认" }) {
@@ -124,7 +134,7 @@ async function request(url, options = {}) {
     return data;
   } catch (error) {
     if (error.name === "AbortError") {
-      throw new Error(`请求超时（>${timeoutMs}ms）`);
+      throw new Error(`请求超时（${timeoutMs}ms）`);
     }
     throw error;
   } finally {
@@ -149,17 +159,15 @@ function renderOverview() {
     return;
   }
 
-  elements.heroNodeVersion.textContent = `Node ${overview.nodeVersion}`;
-  const hasConda = Boolean(overview.condaAvailable || overview.condaPath);
-  elements.heroCondaState.textContent = hasConda ? "Conda 已连接" : "Conda 未检测到";
+  elements.heroNodeVersion.textContent = `Node ${overview.nodeVersion || "-"}`;
+  elements.heroCondaState.textContent = overview.condaAvailable || overview.condaPath ? "Conda 已连接" : "Conda 未检测到";
 
   const stats = [
-    ["平台", `${overview.platform} / ${overview.arch}`],
-    ["当前目录", overview.currentDirectory],
-    ["Pip", overview.pipVersion],
-    ["主机", overview.hostname]
+    ["平台", `${overview.platform || "-"} / ${overview.arch || "-"}`],
+    ["当前目录", overview.currentDirectory || "-"],
+    ["Pip", overview.pipVersion || "-"],
+    ["主机", overview.hostname || "-"]
   ];
-
   if (overview.condaPath) {
     stats.push(["Conda 路径", overview.condaPath]);
   }
@@ -168,8 +176,8 @@ function renderOverview() {
     .map(
       ([label, value]) => `
         <article class="stat-card">
-          <span class="eyebrow">${label}</span>
-          <strong>${value}</strong>
+          <span class="eyebrow">${escapeHtml(label)}</span>
+          <strong>${escapeHtml(value)}</strong>
         </article>
       `
     )
@@ -179,56 +187,53 @@ function renderOverview() {
   elements.pythonVersionCount.textContent = String(pythonVersions.length);
   elements.pythonVersionsList.innerHTML = pythonVersions.length
     ? pythonVersions
-    .map(
-      (entry) => `
-        <article class="list-item">
-          <strong>Python ${entry.version}</strong>
-          <span class="list-meta">${entry.path}</span>
-        </article>
-      `
-    )
-    .join("")
-    : `<article class="list-item"><strong>${state.pythonVersionsLoaded ? "未检测到 Python 版本" : "正在后台检测 Python 版本..."}</strong></article>`;
-
-  elements.condaEnvCount.textContent = String(overview.condaEnvironments.length);
-  elements.condaOverviewList.innerHTML = overview.condaEnvironments.length
-    ? overview.condaEnvironments
         .map(
-          (env) => `
+          (entry) => `
             <article class="list-item">
-              <strong>${env.name}</strong>
-              <span class="list-meta">Python ${env.pythonVersion}</span>
-              <span class="list-meta">${env.path}</span>
+              <strong>Python ${escapeHtml(entry.version)}</strong>
+              <span class="list-meta">${escapeHtml(entry.path)}</span>
             </article>
           `
         )
         .join("")
-    : hasConda
-      ? `<article class="list-item"><strong>Conda 已连接</strong><span class="list-meta">当前未读取到环境列表，可能是读取失败或尚未创建额外环境。</span></article>`
-      : `<article class="list-item"><strong>未检测到 Conda</strong><span class="list-meta">可先检查 conda 安装路径。</span></article>`;
+    : `<article class="list-item"><strong>${state.pythonVersionsLoaded ? "未检测到 Python 版本" : "正在扫描 Python 版本..."}</strong></article>`;
+
+  const condaEnvironments = overview.condaEnvironments || [];
+  elements.condaEnvCount.textContent = String(condaEnvironments.length);
+  elements.condaOverviewList.innerHTML = condaEnvironments.length
+    ? condaEnvironments
+        .map(
+          (env) => `
+            <article class="list-item">
+              <strong>${escapeHtml(env.name)}</strong>
+              <span class="list-meta">Python ${escapeHtml(env.pythonVersion)}</span>
+              <span class="list-meta">${escapeHtml(env.path)}</span>
+            </article>
+          `
+        )
+        .join("")
+    : `<article class="list-item"><strong>${overview.condaPath ? "Conda 已连接" : "未检测到 Conda"}</strong><span class="list-meta">${overview.condaPath ? "当前未读取到环境列表。你仍然可以尝试创建新环境。" : "请先确认 conda 安装路径或系统环境变量。"}</span></article>`;
 }
 
 function renderCondaList() {
   elements.condaInventoryMeta.textContent = `${state.conda.length} 个环境`;
-  elements.condaSourceSelect.innerHTML = state.conda
-    .map((env) => `<option value="${env.name}">${env.name} · Python ${env.pythonVersion}</option>`)
+  const condaOptions = state.conda
+    .map((env) => `<option value="${escapeHtml(env.name)}">${escapeHtml(env.name)} · Python ${escapeHtml(env.pythonVersion)}</option>`)
     .join("");
+  elements.condaSourceSelect.innerHTML = condaOptions;
+  elements.condaExportSourceSelect.innerHTML = condaOptions;
 
   elements.condaList.innerHTML = state.conda.length
     ? state.conda
         .map(
           (env) => `
             <article class="list-item">
-              <strong>${env.name}</strong>
-              <span class="list-meta">Python ${env.pythonVersion}</span>
-              <span class="list-meta">${env.path}</span>
+              <strong>${escapeHtml(env.name)}</strong>
+              <span class="list-meta">Python ${escapeHtml(env.pythonVersion)}</span>
+              <span class="list-meta">${escapeHtml(env.path)}</span>
               <span class="list-meta">${env.base ? "base 环境不可删除" : ""}</span>
               <div class="list-actions">
-                ${
-                  env.base
-                    ? ""
-                    : `<button class="ghost-button" data-delete-conda="${env.name}">删除</button>`
-                }
+                ${env.base ? "" : `<button class="ghost-button" data-delete-conda="${escapeHtml(env.name)}">删除</button>`}
               </div>
             </article>
           `
@@ -246,11 +251,11 @@ function renderVenvs() {
         .map(
           (env) => `
             <article class="list-item">
-              <strong>${env.name}</strong>
-              <span class="list-meta">Python ${env.pythonVersion}</span>
-              <span class="list-meta">${env.path}</span>
+              <strong>${escapeHtml(env.name)}</strong>
+              <span class="list-meta">Python ${escapeHtml(env.pythonVersion)}</span>
+              <span class="list-meta">${escapeHtml(env.path)}</span>
               <div class="list-actions">
-                <button class="ghost-button" data-delete-venv="${env.path}">删除</button>
+                <button class="ghost-button" data-delete-venv="${escapeHtml(env.path)}">删除</button>
               </div>
             </article>
           `
@@ -268,21 +273,18 @@ function refreshPackageTargets() {
     targets.push({ label: `venv: ${env.name}`, value: JSON.stringify({ type: "venv", name: env.name, path: env.path }) });
   });
   elements.packageTargetSelect.innerHTML = targets
-    .map((target) => `<option value='${target.value}'>${target.label}</option>`)
+    .map((target) => `<option value='${escapeHtml(target.value)}'>${escapeHtml(target.label)}</option>`)
     .join("");
 }
 
 function renderInstalledPackageOptions() {
   elements.installedPackageSelect.innerHTML = state.installedPackages.length
-    ? [
-        `<option value="">请选择一个已安装包</option>`,
-        ...state.installedPackages.map((pkg) => `<option value="${pkg.name}">${pkg.name} (${pkg.version})</option>`)
-      ].join("")
+    ? [`<option value="">请选择一个已安装包</option>`, ...state.installedPackages.map((pkg) => `<option value="${escapeHtml(pkg.name)}">${escapeHtml(pkg.name)} (${escapeHtml(pkg.version)})</option>`)].join("")
     : `<option value="">未读取到已安装包</option>`;
 }
 
 function renderInstalledPackageLoading(text = "正在加载已安装包...") {
-  elements.installedPackageSelect.innerHTML = `<option value="">${text}</option>`;
+  elements.installedPackageSelect.innerHTML = `<option value="">${escapeHtml(text)}</option>`;
 }
 
 function updateCondaSummary() {
@@ -298,29 +300,25 @@ function updateCondaSummary() {
       .map((item) => item.trim())
       .filter(Boolean);
     lines.push("模式: 按 Python 版本创建");
-    lines.push(`Python版本: ${data.get("pythonVersion")}`);
+    lines.push(`Python 版本: ${data.get("pythonVersion")}`);
     lines.push(`额外安装包: ${packages.length ? packages.join(", ") : "无"}`);
-    lines.push("预估动作: 执行 conda create，并追加额外包参数。");
+    lines.push("预计动作: 执行 conda create，并追加额外包参数。");
   } else {
     const clonePython = form.elements.clonePython.checked;
     const clonePackages = form.elements.clonePackages.checked;
     lines.push("模式: 基于已有环境创建");
     lines.push(`源环境: ${data.get("sourceName") || "<未选择>"}`);
-    lines.push(
-      `克隆内容: ${
-        [clonePython ? "Python版本" : "", clonePackages ? "已安装库" : ""].filter(Boolean).join(", ") || "未选择"
-      }`
-    );
+    lines.push(`克隆内容: ${[clonePython ? "Python 版本" : "", clonePackages ? "已安装库" : ""].filter(Boolean).join(", ") || "未选择"}`);
     if (clonePython && clonePackages) {
-      lines.push("预估动作: 使用 conda clone 完整复制。");
+      lines.push("预计动作: 使用 conda clone 完整复制。");
     } else if (clonePython) {
-      lines.push("预估动作: 读取源环境 Python 版本，创建空环境。");
+      lines.push("预计动作: 读取源环境 Python 版本并创建空环境。");
     } else if (clonePackages) {
       lines.push(`目标 Python 版本: ${data.get("targetPythonVersion")}`);
       lines.push(`导出策略: ${form.elements.explicitPackagesOnly.checked ? "仅显式安装包" : "完整环境依赖"}`);
-      lines.push("预估动作: 导出环境 YAML，重写目标名称和 Python 版本后创建。");
+      lines.push("预计动作: 导出环境 YAML，重写目标名称和 Python 版本后创建。");
     } else {
-      lines.push("预估动作: 请至少选择一项克隆内容。");
+      lines.push("预计动作: 请至少选择一项克隆内容。");
     }
   }
 
@@ -330,7 +328,7 @@ function updateCondaSummary() {
 async function loadOverview() {
   setBusy("正在加载系统信息...");
   state.overview = await request("/api/overview");
-  state.conda = state.overview.condaEnvironments;
+  state.conda = state.overview.condaEnvironments || [];
   renderOverview();
   renderCondaList();
   refreshPackageTargets();
@@ -415,9 +413,7 @@ async function loadInstalledPackages(options = {}) {
     state.installedPackages = await request("/api/packages/list", {
       method: "POST",
       timeoutMs: 12000,
-      body: JSON.stringify({
-        target
-      })
+      body: JSON.stringify({ target })
     });
     renderInstalledPackageOptions();
     if (!options.silent) {
@@ -425,7 +421,7 @@ async function loadInstalledPackages(options = {}) {
     }
   } catch (error) {
     state.installedPackages = [];
-    renderInstalledPackageLoading("加载失败，点“刷新包下拉”重试");
+    renderInstalledPackageLoading("加载失败，点击“刷新包下拉”重试");
     if (!options.silent) {
       setReady(`包下拉加载失败: ${error.message}`);
     }
@@ -464,6 +460,46 @@ async function createCondaEnvironment(event) {
   await loadCondaEnvironments({ silent: true });
   renderOverview();
   elements.globalMessage.textContent = result.message;
+  setReady(result.message);
+}
+
+async function exportCondaEnvironment(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = new FormData(form);
+  const payload = {
+    sourceName: String(data.get("sourceName") || "").trim(),
+    filePath: String(data.get("filePath") || "").trim(),
+    explicitPackagesOnly: form.elements.explicitPackagesOnly.checked
+  };
+
+  setBusy(`正在导出 conda 环境 ${payload.sourceName}...`);
+  const result = await request("/api/conda/environments/export", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+  elements.globalMessage.textContent = result.message;
+  setReady(result.message);
+}
+
+async function importCondaEnvironment(event) {
+  event.preventDefault();
+  const data = new FormData(event.currentTarget);
+  const payload = {
+    name: String(data.get("name") || "").trim(),
+    filePath: String(data.get("filePath") || "").trim(),
+    pythonVersion: data.get("pythonVersion")
+  };
+
+  setBusy(`正在根据环境文件创建 ${payload.name}...`);
+  const result = await request("/api/conda/environments/import", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+  await loadCondaEnvironments({ silent: true });
+  renderOverview();
+  elements.globalMessage.textContent = result.message;
+  setReady(result.message);
 }
 
 async function createVenv(event) {
@@ -480,17 +516,19 @@ async function createVenv(event) {
   });
   await loadVenvs();
   elements.globalMessage.textContent = result.message;
+  setReady(result.message);
 }
 
 async function deleteConda(name) {
   const confirmed = await askConfirm({
     title: "删除 Conda 环境",
-    message: `确定要删除环境 “${name}” 吗？此操作不可撤销。`,
+    message: `确定要删除环境“${name}”吗？此操作不可撤销。`,
     confirmText: "确认删除"
   });
   if (!confirmed) {
     return;
   }
+
   setBusy(`正在删除 conda 环境 ${name}...`);
   showOperationModal({
     eyebrow: "Deleting",
@@ -508,16 +546,17 @@ async function deleteConda(name) {
     updateOperationModal({
       eyebrow: "Completed",
       title: "删除完成",
-      message: `Conda 环境 “${name}” 已处理完成。`,
+      message: `Conda 环境“${name}”已处理完成。`,
       details: result.message,
       closable: true
     });
+    setReady(result.message);
   } catch (error) {
     setReady(error.message);
     updateOperationModal({
       eyebrow: "Failed",
       title: "删除失败",
-      message: `Conda 环境 “${name}” 未能删除。`,
+      message: `Conda 环境“${name}”未能删除。`,
       details: error.message,
       closable: true
     });
@@ -537,6 +576,7 @@ async function deleteVenv(targetPath) {
   const result = await request(`/api/venvs?path=${encodeURIComponent(targetPath)}`, { method: "DELETE" });
   await loadVenvs();
   elements.globalMessage.textContent = result.message;
+  setReady(result.message);
 }
 
 function getSelectedTarget() {
@@ -648,6 +688,9 @@ function wireOperationModal() {
 
 function wireCondaForm() {
   const form = document.querySelector("#condaCreateForm");
+  const exportForm = document.querySelector("#condaExportForm");
+  const importForm = document.querySelector("#condaImportForm");
+
   const toggleMode = () => {
     const isClone = elements.condaModeSelect.value === "clone";
     elements.condaPythonFields.classList.toggle("hidden", isClone);
@@ -660,6 +703,24 @@ function wireCondaForm() {
   form.addEventListener("submit", async (event) => {
     try {
       await createCondaEnvironment(event);
+    } catch (error) {
+      setReady(error.message);
+      alert(error.message);
+    }
+  });
+
+  exportForm.addEventListener("submit", async (event) => {
+    try {
+      await exportCondaEnvironment(event);
+    } catch (error) {
+      setReady(error.message);
+      alert(error.message);
+    }
+  });
+
+  importForm.addEventListener("submit", async (event) => {
+    try {
+      await importCondaEnvironment(event);
     } catch (error) {
       setReady(error.message);
       alert(error.message);
@@ -712,7 +773,7 @@ function wirePackageActions() {
 
   document.querySelector("#refreshTargetsButton").addEventListener("click", async () => {
     try {
-      await Promise.all([loadCondaEnvironments({ silent: true }), loadVenvs(), loadOverview()]);
+      await Promise.all([loadCondaEnvironments({ silent: true }), loadVenvs({ silent: true }), loadOverview()]);
       await loadInstalledPackages({ silent: true });
     } catch (error) {
       setReady(error.message);
@@ -750,7 +811,7 @@ function wirePackageActions() {
       title: "一键升级全部包",
       message:
         target.type === "conda"
-          ? `确定要升级 conda 环境 “${target.name}” 中的全部库吗？\n将先执行 conda update --all，再升级 pip 包。`
+          ? `确定要升级 conda 环境“${target.name}”中的全部库吗？\n将先执行 conda update --all，再升级 pip 包。`
           : "确定要升级当前目标环境中的全部 pip 包吗？",
       confirmText: "确认升级"
     });
