@@ -5,7 +5,8 @@ let mainWindow = null;
 let serverHandle = null;
 
 const APP_NAME = "尉Python环境管理器";
-const APP_AUTHOR = "WeiPython";
+const APP_AUTHOR = "Ethan Wilkins";
+const APP_ID = "com.weipython.desktop";
 const APP_DESCRIPTION =
   "一个面向 Windows 的本地桌面工具，用于集中管理 Python、Conda、venv 与 pip 包操作。";
 const APP_FEATURES = [
@@ -67,11 +68,7 @@ function buildApplicationMenu() {
         ]
       : []),
     {
-      label: "窗口",
-      submenu: [{ role: "reload" }, { role: "toggledevtools" }, { type: "separator" }, { role: "minimize" }]
-    },
-    {
-      label: "帮助",
+      label: "关于",
       submenu: [
         {
           label: `关于 ${APP_NAME}`,
@@ -129,6 +126,7 @@ async function bootstrap() {
 }
 
 app.setName(APP_NAME);
+app.setAppUserModelId(APP_ID);
 app.whenReady().then(bootstrap);
 
 app.on("activate", async () => {

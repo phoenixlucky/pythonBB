@@ -1,9 +1,9 @@
 {
   "name": "pythonbb-web",
-  "version": "2.1.0",
+  "version": "2.1.4",
   "private": true,
   "description": "Python and Conda environment manager desktop app",
-  "author": "WeiPython",
+  "author": "Ethan Wilkins",
   "type": "module",
   "main": "electron/main.js",
   "scripts": {
@@ -34,7 +34,7 @@
       "package.json"
     ],
     "win": {
-      "signAndEditExecutable": false,
+      "signAndEditExecutable": true,
       "target": [
         {
           "target": "nsis",
