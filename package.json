@@ -1,6 +1,6 @@
 {
   "name": "pythonbb-web",
-  "version": "2.1.6",
+  "version": "2.1.7",
   "private": true,
   "description": "Python and Conda environment manager desktop app",
   "author": "Ethan Wilkins",
