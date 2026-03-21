@@ -4,7 +4,7 @@ import { startServer } from "../src/server.js";
 let mainWindow = null;
 let serverHandle = null;
 
-const APP_NAME = "尉Python环境管理器";
+const APP_NAME = "WeiPython 环境管理器";
 const APP_AUTHOR = "Ethan Wilkins";
 const APP_ID = "com.weipython.desktop";
 const APP_DESCRIPTION =
@@ -15,6 +15,17 @@ const APP_FEATURES = [
   "创建、克隆、导入、导出、删除 Conda 环境",
   "查看并管理不同环境中的 Python 包"
 ];
+
+function isAutoLaunchEnabled() {
+  return app.getLoginItemSettings().openAtLogin;
+}
+
+function setAutoLaunchEnabled(enabled) {
+  app.setLoginItemSettings({
+    openAtLogin: enabled,
+    openAsHidden: false
+  });
+}
 
 function getAboutMessage() {
   return [
@@ -41,8 +52,30 @@ async function showAboutDialog() {
   });
 }
 
+async function toggleAutoLaunch(menuItem) {
+  try {
+    setAutoLaunchEnabled(menuItem.checked);
+    buildApplicationMenu();
+    await dialog.showMessageBox(mainWindow, {
+      type: "info",
+      title: APP_NAME,
+      message: menuItem.checked ? "已启用开机自启动" : "已关闭开机自启动",
+      buttons: ["确定"]
+    });
+  } catch (error) {
+    buildApplicationMenu();
+    await dialog.showMessageBox(mainWindow, {
+      type: "error",
+      title: `${APP_NAME}设置失败`,
+      message: error.message || "无法修改开机自启动设置",
+      buttons: ["确定"]
+    });
+  }
+}
+
 function buildApplicationMenu() {
   const isMac = process.platform === "darwin";
+  const autoLaunchEnabled = isAutoLaunchEnabled();
   const template = [
     ...(isMac
       ? [
@@ -67,6 +100,19 @@ function buildApplicationMenu() {
           }
         ]
       : []),
+    {
+      label: "设置",
+      submenu: [
+        {
+          label: "开机自启动",
+          type: "checkbox",
+          checked: autoLaunchEnabled,
+          click: (menuItem) => {
+            void toggleAutoLaunch(menuItem);
+          }
+        }
+      ]
+    },
     {
       label: "关于",
       submenu: [

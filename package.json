@@ -1,6 +1,6 @@
 {
   "name": "pythonbb-web",
-  "version": "2.1.4",
+  "version": "2.1.6",
   "private": true,
   "description": "Python and Conda environment manager desktop app",
   "author": "Ethan Wilkins",
@@ -21,12 +21,18 @@
     "productName": "WeiPython 环境管理器",
     "executableName": "WeiPython",
     "icon": "build/icon.ico",
-    "asar": true,
+    "asar": false,
     "npmRebuild": false,
     "electronDist": "node_modules/electron/dist",
     "directories": {
       "output": "dist"
     },
+    "extraFiles": [
+      {
+        "from": "build/icon.ico",
+        "to": "icon.ico"
+      }
+    ],
     "files": [
       "electron/**/*",
       "public/**/*",
