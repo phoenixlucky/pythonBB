@@ -46,6 +46,7 @@ const elements = {
 };
 
 let confirmResolver = null;
+let operationProgressTimer = null;
 
 function setBusy(message) {
   elements.statusPill.textContent = "处理中";
@@ -114,6 +115,74 @@ function updateOperationModal({ eyebrow, title, message, details, closable }) {
 
 function closeOperationModal() {
   elements.operationModal.classList.add("hidden");
+}
+
+function clearOperationProgressTimer() {
+  if (operationProgressTimer) {
+    clearInterval(operationProgressTimer);
+    operationProgressTimer = null;
+  }
+}
+
+function formatProgressDetails(steps, activeIndex, extraLines = []) {
+  const lines = steps.map((step, index) => {
+    if (index < activeIndex) {
+      return `[已完成] ${step}`;
+    }
+    if (index === activeIndex) {
+      return `[进行中] ${step}`;
+    }
+    return `[等待中] ${step}`;
+  });
+
+  if (extraLines.length) {
+    lines.push("", ...extraLines);
+  }
+
+  return lines.join("\n");
+}
+
+function startOperationProgress({ eyebrow, title, message, steps, extraLines = [], stepIntervalMs = 1600 }) {
+  clearOperationProgressTimer();
+
+  let activeIndex = 0;
+  showOperationModal({
+    eyebrow,
+    title,
+    message,
+    details: formatProgressDetails(steps, activeIndex, extraLines),
+    closable: false
+  });
+
+  operationProgressTimer = setInterval(() => {
+    activeIndex = Math.min(activeIndex + 1, steps.length - 1);
+    updateOperationModal({
+      details: formatProgressDetails(steps, activeIndex, extraLines)
+    });
+  }, stepIntervalMs);
+
+  return {
+    complete({ eyebrow: nextEyebrow = "Completed", title: nextTitle, message: nextMessage, details, closable = true }) {
+      clearOperationProgressTimer();
+      updateOperationModal({
+        eyebrow: nextEyebrow,
+        title: nextTitle,
+        message: nextMessage,
+        details,
+        closable
+      });
+    },
+    fail({ eyebrow: nextEyebrow = "Failed", title: nextTitle, message: nextMessage, details, closable = true }) {
+      clearOperationProgressTimer();
+      updateOperationModal({
+        eyebrow: nextEyebrow,
+        title: nextTitle,
+        message: nextMessage,
+        details,
+        closable
+      });
+    }
+  };
 }
 
 async function request(url, options = {}) {
@@ -474,17 +543,58 @@ async function exportCondaEnvironment(event) {
   };
 
   setBusy(`正在导出 conda 环境 ${payload.sourceName}...`);
-  const result = await request("/api/conda/environments/export", {
-    method: "POST",
-    body: JSON.stringify(payload)
+  const submitButton = form.querySelector('button[type="submit"]');
+  const progress = startOperationProgress({
+    eyebrow: "Exporting",
+    title: "正在导出环境文件",
+    message: `源环境：${payload.sourceName || "<未选择>"}`,
+    steps: [
+      "校验导出参数",
+      `调用 Conda 导出${payload.explicitPackagesOnly ? "显式安装包" : "完整环境依赖"}`,
+      "等待 Conda 返回环境配置",
+      "写入 YAML 文件"
+    ],
+    extraLines: [
+      `导出文件: ${payload.filePath || "<未填写>"}`,
+      `导出策略: ${payload.explicitPackagesOnly ? "仅导出显式安装包" : "导出完整环境依赖"}`
+    ]
   });
-  elements.globalMessage.textContent = result.message;
-  setReady(result.message);
+
+  if (submitButton) {
+    submitButton.disabled = true;
+  }
+
+  try {
+    const result = await request("/api/conda/environments/export", {
+      method: "POST",
+      timeoutMs: 300000,
+      body: JSON.stringify(payload)
+    });
+    elements.globalMessage.textContent = result.message;
+    setReady(result.message);
+    progress.complete({
+      title: "环境文件导出完成",
+      message: `Conda 环境“${payload.sourceName}”已导出。`,
+      details: [`结果: ${result.message}`, `输出文件: ${result.filePath || payload.filePath}`].join("\n")
+    });
+  } catch (error) {
+    setReady(error.message);
+    progress.fail({
+      title: "环境文件导出失败",
+      message: `Conda 环境“${payload.sourceName || "<未选择>"}”导出未完成。`,
+      details: error.message
+    });
+  } finally {
+    if (submitButton) {
+      submitButton.disabled = false;
+    }
+  }
 }
 
 async function importCondaEnvironment(event) {
   event.preventDefault();
-  const data = new FormData(event.currentTarget);
+  const form = event.currentTarget;
+  const data = new FormData(form);
   const payload = {
     name: String(data.get("name") || "").trim(),
     filePath: String(data.get("filePath") || "").trim(),
@@ -492,14 +602,54 @@ async function importCondaEnvironment(event) {
   };
 
   setBusy(`正在根据环境文件创建 ${payload.name}...`);
-  const result = await request("/api/conda/environments/import", {
-    method: "POST",
-    body: JSON.stringify(payload)
+  const submitButton = form.querySelector('button[type="submit"]');
+  const progress = startOperationProgress({
+    eyebrow: "Importing",
+    title: "正在根据环境文件创建环境",
+    message: `目标环境：${payload.name || "<未填写>"}`,
+    steps: [
+      "校验环境文件路径",
+      "读取并重写环境 YAML",
+      "调用 Conda 创建新环境",
+      "刷新环境列表"
+    ],
+    extraLines: [
+      `环境文件: ${payload.filePath || "<未填写>"}`,
+      `Python 版本: ${payload.pythonVersion || "使用环境文件中的版本"}`
+    ]
   });
-  await loadCondaEnvironments({ silent: true });
-  renderOverview();
-  elements.globalMessage.textContent = result.message;
-  setReady(result.message);
+
+  if (submitButton) {
+    submitButton.disabled = true;
+  }
+
+  try {
+    const result = await request("/api/conda/environments/import", {
+      method: "POST",
+      timeoutMs: 300000,
+      body: JSON.stringify(payload)
+    });
+    await loadCondaEnvironments({ silent: true });
+    renderOverview();
+    elements.globalMessage.textContent = result.message;
+    setReady(result.message);
+    progress.complete({
+      title: "环境导入完成",
+      message: `已根据环境文件创建环境“${payload.name}”。`,
+      details: [`结果: ${result.message}`, `来源文件: ${result.sourceFile || payload.filePath}`].join("\n")
+    });
+  } catch (error) {
+    setReady(error.message);
+    progress.fail({
+      title: "环境导入失败",
+      message: `环境“${payload.name || "<未填写>"}”创建未完成。`,
+      details: error.message
+    });
+  } finally {
+    if (submitButton) {
+      submitButton.disabled = false;
+    }
+  }
 }
 
 async function createVenv(event) {
