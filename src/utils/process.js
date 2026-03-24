@@ -125,3 +125,80 @@ export function runCommand(command, args = [], options = {}) {
     }
   });
 }
+
+export function runStreamingCommand(command, args = [], options = {}) {
+  return new Promise((resolve, reject) => {
+    let child;
+
+    try {
+      child = spawn(command, args, {
+        cwd: options.cwd,
+        shell: false,
+        windowsHide: true,
+        env: { ...process.env, ...(options.env || {}) }
+      });
+    } catch (error) {
+      reject(error);
+      return;
+    }
+
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    let timeoutId = null;
+
+    const finish = (payload) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      resolve(payload);
+    };
+
+    child.stdout.on("data", (chunk) => {
+      const text = chunk.toString();
+      stdout += text;
+      options.onStdout?.(text);
+    });
+
+    child.stderr.on("data", (chunk) => {
+      const text = chunk.toString();
+      stderr += text;
+      options.onStderr?.(text);
+    });
+
+    child.on("error", (error) => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      reject(error);
+    });
+
+    child.on("close", (code) => {
+      finish({
+        ok: code === 0,
+        code,
+        stdout,
+        stderr
+      });
+    });
+
+    if (options.timeoutMs) {
+      timeoutId = setTimeout(() => {
+        if (settled) {
+          return;
+        }
+        child.kill();
+        finish({
+          ok: false,
+          code: 124,
+          stdout,
+          stderr: stderr || `命令执行超时（>${options.timeoutMs}ms）`
+        });
+      }, options.timeoutMs);
+    }
+  });
+}

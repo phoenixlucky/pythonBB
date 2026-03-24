@@ -1,8 +1,58 @@
-import { runCommand } from "../utils/process.js";
+import crypto from "node:crypto";
+import { runCommand, runStreamingCommand } from "../utils/process.js";
 import { resolvePythonExecutable, runCondaCommand } from "./environment-service.js";
 
 const latestVersionCache = new Map();
 const LATEST_VERSION_CACHE_TTL_MS = 5 * 60 * 1000;
+const packageTasks = new Map();
+const PACKAGE_TASK_TTL_MS = 30 * 60 * 1000;
+const MAX_TASK_LOG_LENGTH = 120000;
+
+function cleanupPackageTasks() {
+  const now = Date.now();
+  for (const [taskId, task] of packageTasks.entries()) {
+    const finishedAtMs = task.finishedAt ? Date.parse(task.finishedAt) : NaN;
+    if (Number.isFinite(finishedAtMs) && now - finishedAtMs > PACKAGE_TASK_TTL_MS) {
+      packageTasks.delete(taskId);
+    }
+  }
+}
+
+function createPackageTaskSnapshot(task) {
+  return {
+    taskId: task.taskId,
+    status: task.status,
+    packageName: task.packageName,
+    upgrade: task.upgrade,
+    target: task.target,
+    message: task.message,
+    output: task.output,
+    startedAt: task.startedAt,
+    finishedAt: task.finishedAt
+  };
+}
+
+function appendTaskOutput(task, chunk, source = "stdout") {
+  const normalized = String(chunk || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  if (!normalized) {
+    return;
+  }
+
+  const prefix = source === "stderr" ? "[stderr] " : "";
+  task.output += normalized
+    .split("\n")
+    .map((line, index, lines) => {
+      if (!line && index === lines.length - 1) {
+        return "";
+      }
+      return `${prefix}${line}`;
+    })
+    .join("\n");
+
+  if (task.output.length > MAX_TASK_LOG_LENGTH) {
+    task.output = `[日志过长，已截断早期输出]\n${task.output.slice(-MAX_TASK_LOG_LENGTH)}`;
+  }
+}
 
 export async function listPackages(target, preferredRoot = "") {
   const pythonExecutable = await resolvePythonExecutable(target, preferredRoot);
@@ -26,6 +76,85 @@ export async function installPackage(target, packageName, upgrade = false, prefe
     throw new Error(result.stderr || "安装包失败");
   }
   return { message: `包 '${packageName}' 安装成功` };
+}
+
+export async function startInstallPackageTask(target, packageName, upgrade = false, preferredRoot = "") {
+  cleanupPackageTasks();
+
+  const normalizedName = String(packageName || "").trim();
+  if (!normalizedName) {
+    throw new Error("缺少包名");
+  }
+
+  const pythonExecutable = await resolvePythonExecutable(target, preferredRoot);
+  const args = ["-m", "pip", "install"];
+  if (upgrade) {
+    args.push("--upgrade");
+  }
+  args.push(normalizedName);
+
+  const task = {
+    taskId: crypto.randomUUID(),
+    status: "running",
+    packageName: normalizedName,
+    upgrade: Boolean(upgrade),
+    target,
+    message: upgrade ? `正在升级包 '${normalizedName}'` : `正在安装包 '${normalizedName}'`,
+    output: [
+      `命令: ${pythonExecutable} ${args.join(" ")}`,
+      `目标环境: ${target.type}${target.name ? ` / ${target.name}` : ""}`,
+      ""
+    ].join("\n"),
+    startedAt: new Date().toISOString(),
+    finishedAt: null
+  };
+
+  packageTasks.set(task.taskId, task);
+
+  void (async () => {
+    try {
+      const result = await runStreamingCommand(pythonExecutable, args, {
+        timeoutMs: 300000,
+        onStdout: (text) => appendTaskOutput(task, text, "stdout"),
+        onStderr: (text) => appendTaskOutput(task, text, "stderr")
+      });
+
+      task.finishedAt = new Date().toISOString();
+      if (!result.ok) {
+        task.status = "failed";
+        task.message = result.stderr || result.stdout || "安装包失败";
+        if (!task.output.includes(task.message)) {
+          appendTaskOutput(task, `\n${task.message}\n`, "stderr");
+        }
+        return;
+      }
+
+      task.status = "completed";
+      task.message = upgrade ? `包 '${normalizedName}' 升级成功` : `包 '${normalizedName}' 安装成功`;
+      if (!task.output.endsWith("\n")) {
+        task.output += "\n";
+      }
+      task.output += `${task.message}\n`;
+    } catch (error) {
+      task.status = "failed";
+      task.message = error.message || "安装包失败";
+      task.finishedAt = new Date().toISOString();
+      appendTaskOutput(task, `\n${task.message}\n`, "stderr");
+    }
+  })();
+
+  return createPackageTaskSnapshot(task);
+}
+
+export function getPackageTask(taskId) {
+  cleanupPackageTasks();
+
+  const task = packageTasks.get(taskId);
+  if (!task) {
+    throw new Error("安装任务不存在或已过期");
+  }
+
+  return createPackageTaskSnapshot(task);
 }
 
 async function listOutdatedPackages(pythonExecutable) {

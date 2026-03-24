@@ -14,11 +14,13 @@ import {
   listVirtualEnvironments
 } from "./services/environment-service.js";
 import {
+  getPackageTask,
   getLatestPackageVersion,
   installFromRequirements,
   installPackage,
   listPackages,
   showPackageInfo,
+  startInstallPackageTask,
   uninstallPackage,
   upgradeAllPackages,
   upgradePip
@@ -156,6 +158,22 @@ async function handleApi(request, response, pathname, searchParams) {
         200,
         await installPackage(parseTarget(body.target), body.packageName, Boolean(body.upgrade), preferredCondaRoot)
       );
+      return;
+    }
+
+    if (request.method === "POST" && pathname === "/api/packages/install-task") {
+      const body = await readBody(request);
+      sendJson(
+        response,
+        200,
+        await startInstallPackageTask(parseTarget(body.target), body.packageName, Boolean(body.upgrade), preferredCondaRoot)
+      );
+      return;
+    }
+
+    if (request.method === "GET" && pathname.startsWith("/api/packages/tasks/")) {
+      const taskId = decodeURIComponent(pathname.split("/").pop());
+      sendJson(response, 200, getPackageTask(taskId));
       return;
     }
 

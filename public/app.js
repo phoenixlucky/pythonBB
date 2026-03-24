@@ -95,6 +95,12 @@ function showOperationModal({ eyebrow = "Operation", title, message, details = "
   elements.operationModal.classList.remove("hidden");
 }
 
+function scrollOperationDetailsToBottom() {
+  if (elements.operationDetails) {
+    elements.operationDetails.scrollTop = elements.operationDetails.scrollHeight;
+  }
+}
+
 function updateOperationModal({ eyebrow, title, message, details, closable }) {
   if (eyebrow !== undefined) {
     elements.operationEyebrow.textContent = eyebrow;
@@ -107,6 +113,7 @@ function updateOperationModal({ eyebrow, title, message, details, closable }) {
   }
   if (details !== undefined) {
     elements.operationDetails.textContent = details;
+    scrollOperationDetailsToBottom();
   }
   if (closable !== undefined) {
     elements.operationCloseButton.disabled = !closable;
@@ -591,6 +598,101 @@ async function exportCondaEnvironment(event) {
   }
 }
 
+function formatTaskOutput(output, fallbackMessage = "") {
+  const text = String(output || "").trim();
+  if (text) {
+    return text;
+  }
+  return fallbackMessage;
+}
+
+async function runInstallPackageAction(payload = {}) {
+  const target = getSelectedTarget();
+  const packageName = String(payload.packageName || "").trim();
+  const isUpgrade = Boolean(payload.upgrade);
+
+  if (!packageName) {
+    setReady("请输入包名。");
+    elements.packageResults.textContent = "请输入包名后再执行该操作。";
+    elements.packageResultMeta.textContent = "缺少包名";
+    return;
+  }
+
+  setBusy(isUpgrade ? "正在升级包..." : "正在安装包...");
+  showOperationModal({
+    eyebrow: isUpgrade ? "Upgrading" : "Installing",
+    title: isUpgrade ? "正在升级包" : "正在安装包",
+    message: `${packageName} · ${target?.type || "unknown"}${target?.name ? ` / ${target.name}` : ""}`,
+    details: "正在提交安装任务...",
+    closable: false
+  });
+
+  try {
+    const task = await request("/api/packages/install-task", {
+      method: "POST",
+      body: JSON.stringify({
+        target,
+        packageName,
+        upgrade: isUpgrade
+      })
+    });
+
+    let latestTask = task;
+    let finished = false;
+
+    while (!finished) {
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      latestTask = await request(`/api/packages/tasks/${encodeURIComponent(task.taskId)}`, {
+        timeoutMs: 10000
+      });
+
+      updateOperationModal({
+        details: formatTaskOutput(latestTask.output, latestTask.message)
+      });
+
+      finished = latestTask.status === "completed" || latestTask.status === "failed";
+    }
+
+    const finalDetails = formatTaskOutput(latestTask.output, latestTask.message);
+    elements.packageResults.textContent = finalDetails;
+
+    if (latestTask.status === "completed") {
+      elements.packageResultMeta.textContent = "安装完成";
+      elements.globalMessage.textContent = latestTask.message;
+      setReady(latestTask.message || "包操作已完成。");
+      updateOperationModal({
+        eyebrow: "Completed",
+        title: isUpgrade ? "包升级完成" : "包安装完成",
+        message: latestTask.message,
+        details: finalDetails,
+        closable: true
+      });
+      await loadInstalledPackages({ silent: true });
+      return;
+    }
+
+    elements.packageResultMeta.textContent = "安装失败";
+    setReady(latestTask.message || "包安装失败");
+    updateOperationModal({
+      eyebrow: "Failed",
+      title: isUpgrade ? "包升级失败" : "包安装失败",
+      message: latestTask.message || "安装过程失败",
+      details: finalDetails,
+      closable: true
+    });
+    throw new Error(latestTask.message || "包安装失败");
+  } catch (error) {
+    updateOperationModal({
+      eyebrow: "Failed",
+      title: isUpgrade ? "包升级失败" : "包安装失败",
+      message: error.message || "安装过程失败",
+      details: error.message || "安装过程失败",
+      closable: true
+    });
+    throw error;
+  }
+}
+
 async function importCondaEnvironment(event) {
   event.preventDefault();
   const form = event.currentTarget;
@@ -744,8 +846,12 @@ async function runPackageAction(action, payload = {}) {
     return;
   }
 
+  if (action === "install") {
+    await runInstallPackageAction(payload);
+    return;
+  }
+
   const actionMessageMap = {
-    install: "正在安装包...",
     uninstall: "正在卸载包...",
     show: "正在读取包信息...",
     list: "正在列出包...",
