@@ -1,4 +1,33 @@
 # 更新日志
+## v2.1.10 - 品牌信息统一与安装器本地化优化 (2026-03-26)
+
+### 🚀 新增功能
+
+#### 安装器快捷方式本地化
+- ✅ 英文安装环境下桌面和开始菜单快捷方式显示 `WeiPython Manager`
+- ✅ 中文安装环境下桌面和开始菜单快捷方式显示 `尉Python 环境管理器`
+- ✅ 卸载时自动清理中英文两套快捷方式名称，避免残留旧图标
+
+### 🛠 优化调整
+
+#### 品牌与关于信息统一
+- ✅ 软件名称统一为 `WeiPython Manager / 尉Python 环境管理器`
+- ✅ About 窗口补充中英文软件简介、核心定位、版本说明与开发者信息
+- ✅ 首页品牌标题与核心定位文案同步更新
+
+#### Windows 打包元数据
+- ✅ 更新 Product Name 为 `WeiPython Manager`
+- ✅ 更新 File Description 为 `Python Environment Management Tool`
+- ✅ 更新 Company / Copyright 展示信息为 `Ethan Wilkins`
+- ✅ 默认安装目录更新为 `D:\Program Files\WeiPython Manager`
+
+### 📦 本次产物
+
+- 安装包文件名：`WeiPython-Setup-2.1.10.exe`
+- 发布类型：Windows NSIS 安装包
+
+---
+
 ## v2.1.9 - 包安装过程可视化与操作反馈增强 (2026-03-24)
 
 ### 🚀 新增功能
