@@ -173,7 +173,7 @@ async function createMainWindow() {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
-      preload: path.join(app.getAppPath(), "electron", "preload.js")
+      preload: path.join(app.getAppPath(), "electron", "preload.cjs")
     },
     show: false
   });
