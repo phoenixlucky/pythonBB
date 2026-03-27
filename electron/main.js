@@ -1,5 +1,7 @@
-import { app, BrowserWindow, dialog, Menu } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu } from "electron";
+import path from "node:path";
 import { startServer } from "../src/server.js";
+import { buildDefaultCondaExportFilePath } from "../src/services/environment-service.js";
 
 let mainWindow = null;
 let serverHandle = null;
@@ -170,7 +172,8 @@ async function createMainWindow() {
     title: `${APP_NAME} / ${APP_NAME_ZH}`,
     webPreferences: {
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      preload: path.join(app.getAppPath(), "electron", "preload.js")
     },
     show: false
   });
@@ -185,6 +188,22 @@ async function createMainWindow() {
 
   await mainWindow.loadURL(serverHandle.url);
 }
+
+ipcMain.handle("dialog:choose-conda-export-path", async (_event, payload = {}) => {
+  const requestedDefaultPath = String(payload?.defaultPath || "").trim();
+  const defaultPath = requestedDefaultPath || buildDefaultCondaExportFilePath("conda-environment");
+
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: "选择 Conda 环境导出文件",
+    defaultPath,
+    filters: [{ name: "YAML", extensions: ["yml", "yaml"] }]
+  });
+
+  return {
+    canceled: result.canceled,
+    filePath: result.filePath || ""
+  };
+});
 
 async function bootstrap() {
   try {

@@ -3,6 +3,7 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  buildDefaultCondaExportFilePath,
   createCondaEnvironment,
   createVirtualEnvironment,
   deleteCondaEnvironment,
@@ -106,6 +107,13 @@ async function handleApi(request, response, pathname, searchParams) {
 
     if (request.method === "GET" && pathname === "/api/conda/environments") {
       sendJson(response, 200, await listCondaEnvironments(preferredCondaRoot));
+      return;
+    }
+
+    if (request.method === "GET" && pathname === "/api/conda/environments/export/default-path") {
+      sendJson(response, 200, {
+        filePath: buildDefaultCondaExportFilePath(searchParams.get("sourceName") || "")
+      });
       return;
     }
 

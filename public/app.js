@@ -26,6 +26,8 @@ const elements = {
   packageResultMeta: document.querySelector("#packageResultMeta"),
   condaSourceSelect: document.querySelector("#condaSourceSelect"),
   condaExportSourceSelect: document.querySelector("#condaExportSourceSelect"),
+  condaExportAutoPathButton: document.querySelector("#condaExportAutoPathButton"),
+  condaExportBrowseButton: document.querySelector("#condaExportBrowseButton"),
   condaModeSelect: document.querySelector("#condaModeSelect"),
   condaPythonFields: document.querySelector("#condaPythonFields"),
   condaCloneFields: document.querySelector("#condaCloneFields"),
@@ -318,6 +320,7 @@ function renderCondaList() {
     : `<article class="list-item"><strong>${state.overview?.condaPath ? "Conda 已连接" : "没有检测到 Conda"}</strong><span class="list-meta">${state.overview?.condaPath ? "当前未读取到环境列表。你仍然可以尝试创建新环境。" : "请先确认 conda 安装路径或系统环境变量。"}</span></article>`;
 
   updateCondaSummary();
+  void fillCondaExportPath();
 }
 
 function renderVenvs() {
@@ -399,6 +402,33 @@ function updateCondaSummary() {
   }
 
   elements.condaSummary.textContent = lines.join("\n");
+}
+
+async function getDefaultCondaExportPath(sourceName) {
+  const envName = String(sourceName || "").trim();
+  if (!envName) {
+    return "";
+  }
+
+  const result = await request(`/api/conda/environments/export/default-path?sourceName=${encodeURIComponent(envName)}`);
+  return String(result.filePath || "").trim();
+}
+
+async function fillCondaExportPath({ force = false } = {}) {
+  const exportForm = document.querySelector("#condaExportForm");
+  if (!exportForm) {
+    return "";
+  }
+
+  const input = exportForm.elements.filePath;
+  const currentValue = String(input.value || "").trim();
+  if (!force && currentValue) {
+    return currentValue;
+  }
+
+  const nextPath = await getDefaultCondaExportPath(exportForm.elements.sourceName.value);
+  input.value = nextPath;
+  return nextPath;
 }
 
 async function loadOverview() {
@@ -543,9 +573,10 @@ async function exportCondaEnvironment(event) {
   event.preventDefault();
   const form = event.currentTarget;
   const data = new FormData(form);
+  const resolvedFilePath = String(data.get("filePath") || "").trim() || (await fillCondaExportPath({ force: true }));
   const payload = {
     sourceName: String(data.get("sourceName") || "").trim(),
-    filePath: String(data.get("filePath") || "").trim(),
+    filePath: resolvedFilePath,
     explicitPackagesOnly: form.elements.explicitPackagesOnly.checked
   };
 
@@ -974,6 +1005,49 @@ function wireCondaForm() {
     }
   });
 
+  exportForm.elements.sourceName.addEventListener("change", async () => {
+    try {
+      await fillCondaExportPath({ force: true });
+    } catch (error) {
+      setReady(error.message);
+    }
+  });
+
+  elements.condaExportAutoPathButton.addEventListener("click", async () => {
+    try {
+      const filePath = await fillCondaExportPath({ force: true });
+      if (filePath) {
+        setReady(`已生成导出路径: ${filePath}`);
+      }
+    } catch (error) {
+      setReady(error.message);
+      alert(error.message);
+    }
+  });
+
+  elements.condaExportBrowseButton.addEventListener("click", async () => {
+    try {
+      const sourceName = exportForm.elements.sourceName.value;
+      const currentValue = String(exportForm.elements.filePath.value || "").trim();
+      const defaultPath = currentValue || (await getDefaultCondaExportPath(sourceName));
+
+      if (!window.desktopAPI?.chooseCondaExportPath) {
+        exportForm.elements.filePath.value = defaultPath;
+        setReady("当前为网页模式，已填入自动生成路径；如需其他位置请直接修改。");
+        return;
+      }
+
+      const result = await window.desktopAPI.chooseCondaExportPath(defaultPath);
+      if (!result?.canceled && result?.filePath) {
+        exportForm.elements.filePath.value = result.filePath;
+        setReady(`已选择导出路径: ${result.filePath}`);
+      }
+    } catch (error) {
+      setReady(error.message);
+      alert(error.message);
+    }
+  });
+
   importForm.addEventListener("submit", async (event) => {
     try {
       await importCondaEnvironment(event);
@@ -993,6 +1067,7 @@ function wireCondaForm() {
   });
 
   toggleMode();
+  void fillCondaExportPath({ force: true });
 }
 
 function wireVenvForm() {

@@ -358,6 +358,22 @@ function normalizeEnvironmentFilePath(filePath) {
   return path.resolve(normalized);
 }
 
+function sanitizeEnvironmentFileName(name) {
+  const normalized = String(name || "")
+    .trim()
+    .replace(/[<>:"/\\|?*\x00-\x1f]/g, "-")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^[.-]+|[.-]+$/g, "");
+
+  return normalized || "conda-environment";
+}
+
+export function buildDefaultCondaExportFilePath(envName) {
+  const exportsDir = path.join(os.homedir(), "Documents", "WeiPython", "exports");
+  return path.join(exportsDir, `${sanitizeEnvironmentFileName(envName)}.yml`);
+}
+
 export async function createCondaEnvironment(payload, preferredRoot = "") {
   const condaExecutable = await detectCondaExecutable(preferredRoot);
   if (!condaExecutable) {
@@ -477,7 +493,8 @@ export async function exportCondaEnvironmentToFile(payload, preferredRoot = "") 
     throw new Error("请选择要导出的 conda 环境");
   }
 
-  const targetFile = normalizeEnvironmentFilePath(payload?.filePath);
+  const requestedFilePath = String(payload?.filePath || "").trim();
+  const targetFile = normalizeEnvironmentFilePath(requestedFilePath || buildDefaultCondaExportFilePath(envName));
   const exportArgs = ["env", "export", "-n", envName];
   exportArgs.push(payload?.explicitPackagesOnly ? "--from-history" : "--no-builds");
 
