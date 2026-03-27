@@ -205,6 +205,24 @@
                   </label>
                   <button class="ghost-button" type="submit">导出环境文件</button>
                 </form>
+
+                <div class="divider-label">批量导出</div>
+
+                <form id="condaExportAllForm" class="stack-form collapse-body collapse-body-topless">
+                  <label>
+                    <span>导出目录</span>
+                    <div class="inline-form-row">
+                      <input name="directoryPath" placeholder="留空时将使用默认导出目录" />
+                      <button class="ghost-button" type="button" id="condaExportAllAutoPathButton">自动生成</button>
+                      <button class="ghost-button" type="button" id="condaExportAllBrowseButton">浏览</button>
+                    </div>
+                  </label>
+                  <label class="check-line framed-check">
+                    <input type="checkbox" name="explicitPackagesOnly" />
+                    <span>仅导出显式安装包</span>
+                  </label>
+                  <button class="primary-button" type="submit">一键导出全部环境</button>
+                </form>
               </details>
 
               <details class="surface-card collapse-card">

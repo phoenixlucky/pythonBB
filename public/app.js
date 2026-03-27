@@ -28,6 +28,8 @@ const elements = {
   condaExportSourceSelect: document.querySelector("#condaExportSourceSelect"),
   condaExportAutoPathButton: document.querySelector("#condaExportAutoPathButton"),
   condaExportBrowseButton: document.querySelector("#condaExportBrowseButton"),
+  condaExportAllAutoPathButton: document.querySelector("#condaExportAllAutoPathButton"),
+  condaExportAllBrowseButton: document.querySelector("#condaExportAllBrowseButton"),
   condaModeSelect: document.querySelector("#condaModeSelect"),
   condaPythonFields: document.querySelector("#condaPythonFields"),
   condaCloneFields: document.querySelector("#condaCloneFields"),
@@ -414,6 +416,11 @@ async function getDefaultCondaExportPath(sourceName) {
   return String(result.filePath || "").trim();
 }
 
+async function getDefaultCondaExportDirectory() {
+  const result = await request("/api/conda/environments/export/default-directory");
+  return String(result.directoryPath || "").trim();
+}
+
 async function fillCondaExportPath({ force = false } = {}) {
   const exportForm = document.querySelector("#condaExportForm");
   if (!exportForm) {
@@ -429,6 +436,34 @@ async function fillCondaExportPath({ force = false } = {}) {
   const nextPath = await getDefaultCondaExportPath(exportForm.elements.sourceName.value);
   input.value = nextPath;
   return nextPath;
+}
+
+async function fillCondaExportDirectory({ force = false } = {}) {
+  const exportAllForm = document.querySelector("#condaExportAllForm");
+  if (!exportAllForm) {
+    return "";
+  }
+
+  const input = exportAllForm.elements.directoryPath;
+  const currentValue = String(input.value || "").trim();
+  if (!force && currentValue) {
+    return currentValue;
+  }
+
+  const nextPath = await getDefaultCondaExportDirectory();
+  input.value = nextPath;
+  return nextPath;
+}
+
+function ensureDesktopApi(actionDescription) {
+  if (window.desktopAPI?.isDesktop?.()) {
+    return true;
+  }
+
+  const message = `当前运行环境不支持${actionDescription}，已回退为自动填充默认路径。`;
+  setReady(message);
+  alert(message);
+  return false;
 }
 
 async function loadOverview() {
@@ -620,6 +655,72 @@ async function exportCondaEnvironment(event) {
     progress.fail({
       title: "环境文件导出失败",
       message: `Conda 环境“${payload.sourceName || "<未选择>"}”导出未完成。`,
+      details: error.message
+    });
+  } finally {
+    if (submitButton) {
+      submitButton.disabled = false;
+    }
+  }
+}
+
+async function exportAllCondaEnvironments(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = new FormData(form);
+  const resolvedDirectoryPath = String(data.get("directoryPath") || "").trim() || (await fillCondaExportDirectory({ force: true }));
+  const payload = {
+    directoryPath: resolvedDirectoryPath,
+    explicitPackagesOnly: form.elements.explicitPackagesOnly.checked
+  };
+
+  setBusy("正在批量导出 conda 环境...");
+  const submitButton = form.querySelector('button[type="submit"]');
+  const progress = startOperationProgress({
+    eyebrow: "Exporting",
+    title: "正在批量导出 Conda 环境",
+    message: `目标目录：${payload.directoryPath || "<未填写>"}`,
+    steps: [
+      "校验导出目录",
+      "读取 Conda 环境列表",
+      "逐个导出环境配置",
+      "按环境名称写入独立 YAML 文件"
+    ],
+    extraLines: [
+      `导出目录: ${payload.directoryPath || "<未填写>"}`,
+      `导出策略: ${payload.explicitPackagesOnly ? "仅导出显式安装包" : "导出完整环境依赖"}`
+    ]
+  });
+
+  if (submitButton) {
+    submitButton.disabled = true;
+  }
+
+  try {
+    const result = await request("/api/conda/environments/export-all", {
+      method: "POST",
+      timeoutMs: 600000,
+      body: JSON.stringify(payload)
+    });
+
+    const details = [
+      `结果: ${result.message}`,
+      `导出目录: ${result.directoryPath}`,
+      ...((result.exportedFiles || []).map((entry) => `${entry.envName}: ${entry.filePath}`))
+    ].join("\n");
+
+    elements.globalMessage.textContent = result.message;
+    setReady(result.message);
+    progress.complete({
+      title: "全部环境导出完成",
+      message: `已批量导出 ${result.exportedFiles?.length || 0} 个 Conda 环境。`,
+      details
+    });
+  } catch (error) {
+    setReady(error.message);
+    progress.fail({
+      title: "全部环境导出失败",
+      message: "批量导出未完成。",
       details: error.message
     });
   } finally {
@@ -976,6 +1077,7 @@ function wireOperationModal() {
 function wireCondaForm() {
   const form = document.querySelector("#condaCreateForm");
   const exportForm = document.querySelector("#condaExportForm");
+  const exportAllForm = document.querySelector("#condaExportAllForm");
   const importForm = document.querySelector("#condaImportForm");
 
   const toggleMode = () => {
@@ -999,6 +1101,15 @@ function wireCondaForm() {
   exportForm.addEventListener("submit", async (event) => {
     try {
       await exportCondaEnvironment(event);
+    } catch (error) {
+      setReady(error.message);
+      alert(error.message);
+    }
+  });
+
+  exportAllForm.addEventListener("submit", async (event) => {
+    try {
+      await exportAllCondaEnvironments(event);
     } catch (error) {
       setReady(error.message);
       alert(error.message);
@@ -1031,9 +1142,8 @@ function wireCondaForm() {
       const currentValue = String(exportForm.elements.filePath.value || "").trim();
       const defaultPath = currentValue || (await getDefaultCondaExportPath(sourceName));
 
-      if (!window.desktopAPI?.chooseCondaExportPath) {
+      if (!window.desktopAPI?.chooseCondaExportPath || !ensureDesktopApi("系统保存位置选择")) {
         exportForm.elements.filePath.value = defaultPath;
-        setReady("当前为网页模式，已填入自动生成路径；如需其他位置请直接修改。");
         return;
       }
 
@@ -1041,6 +1151,43 @@ function wireCondaForm() {
       if (!result?.canceled && result?.filePath) {
         exportForm.elements.filePath.value = result.filePath;
         setReady(`已选择导出路径: ${result.filePath}`);
+      } else {
+        setReady("已取消选择导出文件路径。");
+      }
+    } catch (error) {
+      setReady(error.message);
+      alert(error.message);
+    }
+  });
+
+  elements.condaExportAllAutoPathButton.addEventListener("click", async () => {
+    try {
+      const directoryPath = await fillCondaExportDirectory({ force: true });
+      if (directoryPath) {
+        setReady(`已生成导出目录: ${directoryPath}`);
+      }
+    } catch (error) {
+      setReady(error.message);
+      alert(error.message);
+    }
+  });
+
+  elements.condaExportAllBrowseButton.addEventListener("click", async () => {
+    try {
+      const currentValue = String(exportAllForm.elements.directoryPath.value || "").trim();
+      const defaultPath = currentValue || (await getDefaultCondaExportDirectory());
+
+      if (!window.desktopAPI?.chooseCondaExportDirectory || !ensureDesktopApi("系统目录选择")) {
+        exportAllForm.elements.directoryPath.value = defaultPath;
+        return;
+      }
+
+      const result = await window.desktopAPI.chooseCondaExportDirectory(defaultPath);
+      if (!result?.canceled && result?.directoryPath) {
+        exportAllForm.elements.directoryPath.value = result.directoryPath;
+        setReady(`已选择导出目录: ${result.directoryPath}`);
+      } else {
+        setReady("已取消选择导出目录。");
       }
     } catch (error) {
       setReady(error.message);
@@ -1068,6 +1215,7 @@ function wireCondaForm() {
 
   toggleMode();
   void fillCondaExportPath({ force: true });
+  void fillCondaExportDirectory({ force: true });
 }
 
 function wireVenvForm() {

@@ -591,6 +591,20 @@ textarea {
   padding: 0 20px 20px;
 }
 
+.collapse-body-topless {
+  padding-top: 0;
+}
+
+.divider-label {
+  margin: 0 20px 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--stroke);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted-strong);
+}
+
 .inner-collapse {
   border: 1px solid var(--stroke);
   border-radius: 16px;

@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu } from "electron";
 import path from "node:path";
 import { startServer } from "../src/server.js";
-import { buildDefaultCondaExportFilePath } from "../src/services/environment-service.js";
+import { buildDefaultCondaExportDirectory, buildDefaultCondaExportFilePath } from "../src/services/environment-service.js";
 
 let mainWindow = null;
 let serverHandle = null;
@@ -202,6 +202,22 @@ ipcMain.handle("dialog:choose-conda-export-path", async (_event, payload = {}) =
   return {
     canceled: result.canceled,
     filePath: result.filePath || ""
+  };
+});
+
+ipcMain.handle("dialog:choose-conda-export-directory", async (_event, payload = {}) => {
+  const requestedDefaultPath = String(payload?.defaultPath || "").trim();
+  const defaultPath = requestedDefaultPath || buildDefaultCondaExportDirectory();
+
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: "选择 Conda 环境批量导出目录",
+    defaultPath,
+    properties: ["openDirectory", "createDirectory"]
+  });
+
+  return {
+    canceled: result.canceled,
+    directoryPath: result.filePaths?.[0] || ""
   };
 });
 

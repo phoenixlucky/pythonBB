@@ -374,6 +374,19 @@ export function buildDefaultCondaExportFilePath(envName) {
   return path.join(exportsDir, `${sanitizeEnvironmentFileName(envName)}.yml`);
 }
 
+export function buildDefaultCondaExportDirectory() {
+  return path.join(os.homedir(), "Documents", "WeiPython", "exports");
+}
+
+function normalizeDirectoryPath(directoryPath) {
+  const normalized = String(directoryPath || "").trim();
+  if (!normalized) {
+    throw new Error("请填写导出目录");
+  }
+
+  return path.resolve(normalized);
+}
+
 export async function createCondaEnvironment(payload, preferredRoot = "") {
   const condaExecutable = await detectCondaExecutable(preferredRoot);
   if (!condaExecutable) {
@@ -509,6 +522,43 @@ export async function exportCondaEnvironmentToFile(payload, preferredRoot = "") 
   return {
     message: `环境 '${envName}' 已导出到 ${targetFile}`,
     filePath: targetFile
+  };
+}
+
+export async function exportAllCondaEnvironmentsToDirectory(payload, preferredRoot = "") {
+  const targetDirectory = normalizeDirectoryPath(payload?.directoryPath || buildDefaultCondaExportDirectory());
+  const explicitPackagesOnly = Boolean(payload?.explicitPackagesOnly);
+  const condaInfo = await listCondaEnvironments(preferredRoot);
+  const environments = condaInfo.environments || [];
+
+  if (!environments.length) {
+    throw new Error("当前没有可导出的 conda 环境");
+  }
+
+  await fs.mkdir(targetDirectory, { recursive: true });
+
+  const exportedFiles = [];
+  for (const env of environments) {
+    const exportArgs = ["env", "export", "-n", env.name];
+    exportArgs.push(explicitPackagesOnly ? "--from-history" : "--no-builds");
+
+    const exported = await runCondaCommand(exportArgs, preferredRoot);
+    if (!exported.ok) {
+      throw new Error(`导出环境 '${env.name}' 失败：${formatCondaFailure(exported.stderr, exported.stdout)}`);
+    }
+
+    const targetFile = path.join(targetDirectory, `${sanitizeEnvironmentFileName(env.name)}.yml`);
+    await fs.writeFile(targetFile, exported.stdout, "utf8");
+    exportedFiles.push({
+      envName: env.name,
+      filePath: targetFile
+    });
+  }
+
+  return {
+    message: `已导出 ${exportedFiles.length} 个 conda 环境到 ${targetDirectory}`,
+    directoryPath: targetDirectory,
+    exportedFiles
   };
 }
 

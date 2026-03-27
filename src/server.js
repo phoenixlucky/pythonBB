@@ -3,12 +3,14 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  buildDefaultCondaExportDirectory,
   buildDefaultCondaExportFilePath,
   createCondaEnvironment,
   createVirtualEnvironment,
   deleteCondaEnvironment,
   deleteVirtualEnvironment,
   discoverPythonVersions,
+  exportAllCondaEnvironmentsToDirectory,
   exportCondaEnvironmentToFile,
   importCondaEnvironmentFromFile,
   listCondaEnvironments,
@@ -117,6 +119,13 @@ async function handleApi(request, response, pathname, searchParams) {
       return;
     }
 
+    if (request.method === "GET" && pathname === "/api/conda/environments/export/default-directory") {
+      sendJson(response, 200, {
+        directoryPath: buildDefaultCondaExportDirectory()
+      });
+      return;
+    }
+
     if (request.method === "POST" && pathname === "/api/conda/environments") {
       sendJson(response, 200, await createCondaEnvironment(await readBody(request), preferredCondaRoot));
       return;
@@ -124,6 +133,11 @@ async function handleApi(request, response, pathname, searchParams) {
 
     if (request.method === "POST" && pathname === "/api/conda/environments/export") {
       sendJson(response, 200, await exportCondaEnvironmentToFile(await readBody(request), preferredCondaRoot));
+      return;
+    }
+
+    if (request.method === "POST" && pathname === "/api/conda/environments/export-all") {
+      sendJson(response, 200, await exportAllCondaEnvironmentsToDirectory(await readBody(request), preferredCondaRoot));
       return;
     }
 
