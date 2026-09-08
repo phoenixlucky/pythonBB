@@ -130,16 +130,16 @@ pub fn start_install_uv(version: Option<String>, install_directory: Option<Strin
 }
 
 #[tauri::command]
-pub async fn get_uv_version() -> Option<String> { crate::services::uv_service::version().await }
+pub async fn get_uv_version(path: Option<String>) -> Option<String> { crate::services::uv_service::version(path).await }
 
 #[tauri::command]
 pub async fn get_uv_default_directory() -> String { crate::services::uv_service::default_directory().await }
 
 #[tauri::command]
-pub fn start_uninstall_uv() -> crate::services::task_service::TaskSnapshot {
+pub fn start_uninstall_uv(path: String) -> crate::services::task_service::TaskSnapshot {
     crate::services::task_service::cleanup();
     crate::services::task_service::start("uv-uninstall", "正在卸载 uv", async {
-        crate::services::uv_service::uninstall().await
+        crate::services::uv_service::uninstall(path).await
     })
 }
 

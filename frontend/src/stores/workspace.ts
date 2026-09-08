@@ -43,7 +43,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   async function exportAllConda(directory: string) { const value = await run(() => invokeCommand<OperationResult>("export_all_conda_environments", { request: { directory } })); if (value) showResult(value); }
   async function upgradeConda() { return runTask(() => invokeCommand<TaskSnapshot>("start_upgrade_conda")); }
   async function installUv(version = "", installDirectory = "") { return runTask(() => invokeCommand<TaskSnapshot>("start_install_uv", { version: version.trim() || null, installDirectory: installDirectory.trim() || null })); }
-  async function uninstallUv() { return runTask(() => invokeCommand<TaskSnapshot>("start_uninstall_uv")); }
+  async function uninstallUv(path = "") { return runTask(() => invokeCommand<TaskSnapshot>("start_uninstall_uv", { path })); }
   async function importConda(payload: Record<string, unknown>) { const value = await run(() => invokeCommand<OperationResult>("import_conda_environment", { request: payload })); if (value) { showResult(value); await loadConda(); } }
   async function createVenv(payload: Record<string, unknown>) { const value = await run(() => invokeCommand<OperationResult>("create_virtual_environment", { request: payload })); if (value) { showResult(value); await loadVenvs(); } }
   async function deleteVenv(path: string) { const value = await run(() => invokeCommand<OperationResult>("delete_virtual_environment", { path })); if (value) { showResult(value); await loadVenvs(); } }

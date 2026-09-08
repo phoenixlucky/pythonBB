@@ -115,15 +115,21 @@ fn managed_uv_path(path: &str) -> bool {
         || app_bin.as_deref() == Some(parent.as_str())
 }
 
-pub async fn version() -> Option<String> {
-    let executable = path().await?;
+pub async fn version(selected: Option<String>) -> Option<String> {
+    let executable = if let Some(value) = selected.filter(|value| Path::new(value).is_file()) {
+        value
+    } else {
+        path().await?
+    };
     let result = run(&executable, &["--version".into()], None).await;
     result.stdout.lines().chain(result.stderr.lines()).find(|line| !line.trim().is_empty()).map(|line| line.trim().to_string())
 }
 
-pub async fn uninstall() -> Result<OperationResult, String> {
-    let installed = path().await.ok_or_else(|| "当前未检测到 uv".to_string())?;
-    let saved = crate::services::storage_service::read_settings().await?.uv_path;
+pub async fn uninstall(installed: String) -> Result<OperationResult, String> {
+    let installed = installed.trim().to_string();
+    if installed.is_empty() || !Path::new(&installed).is_file() { return Err("所选 uv 路径不存在".into()); }
+    let mut settings = crate::services::storage_service::read_settings().await?;
+    let saved = settings.uv_path.clone();
     if !managed_uv_path(&installed) && saved.as_deref() != Some(installed.as_str()) {
         return Err("检测到的 uv 不在本程序管理的用户目录中，请使用原安装方式卸载".into());
     }
@@ -134,6 +140,10 @@ pub async fn uninstall() -> Result<OperationResult, String> {
             let file = parent.join(companion);
             if file.is_file() { let _ = tokio::fs::remove_file(file).await; }
         }
+    }
+    if settings.uv_path.as_deref() == Some(installed.as_str()) {
+        settings.uv_path = None;
+        crate::services::storage_service::write_settings(&settings).await?;
     }
     Ok(OperationResult { ok: true, message: "uv 已卸载".into(), command: format!("remove {installed}"), output: installed })
 }
