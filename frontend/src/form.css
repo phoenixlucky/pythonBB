@@ -363,6 +363,22 @@
   white-space: nowrap;
 }
 
+.uv-installation {
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.uv-installation:hover,
+.uv-installation.selected {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
 @media (max-width: 1100px) {
   .topbar {
     padding: 0 28px;
