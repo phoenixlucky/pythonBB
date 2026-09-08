@@ -1,0 +1,23 @@
+[package]
+name = "wj-python-manager"
+version = "3.0.0"
+description = "WJ Python管理大师 local Python environment manager"
+authors = ["尉缭子科技"]
+edition = "2021"
+
+[lib]
+name = "weipython_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.4", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2.11", features = [] }
+thiserror = "2"
+tokio = { version = "1", features = ["fs", "process", "macros", "rt-multi-thread", "sync", "io-util", "time"] }
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]

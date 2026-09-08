@@ -2,7 +2,11 @@ __pycache__/
 *.py[cod]
 node_modules/
 dist/
+src-tauri/target/
+src-tauri/gen/
 dist-backup-20260321-091618/
+release/
+.cache/
 .codegraph/
 .reasonix/
 nul

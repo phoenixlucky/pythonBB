@@ -1,78 +1,32 @@
 {
-  "name": "pythonbb-web",
-  "version": "2.9.2",
+  "name": "wj-python-manager-client",
+  "version": "3.0.0",
   "private": true,
-  "description": "Python Environment Management Tool",
+  "description": "WJ Python管理大师 Tauri desktop client",
   "author": "尉缭子科技",
   "license": "GPL-3.0",
   "type": "module",
-  "main": "electron/main.js",
   "engines": {
     "node": ">=24"
   },
   "scripts": {
-    "web": "node src/server.js",
-    "desktop": "electron .",
-    "test": "node --test",
-    "pack": "electron-builder --dir",
-    "dist": "electron-builder --win nsis"
+    "frontend:dev": "vite --config frontend/vite.config.ts",
+    "frontend:build": "vite build --config frontend/vite.config.ts",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "node scripts/build-release.mjs",
+    "test": "cargo test --manifest-path src-tauri/Cargo.toml"
   },
   "devDependencies": {
-    "electron": "^43.4.0",
-    "electron-builder": "^26.15.3"
+    "@tauri-apps/cli": "^2.11.0",
+    "@vitejs/plugin-vue": "^6.0.1",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.2",
+    "vite": "^8.0.0"
   },
-  "build": {
-    "appId": "com.weipython.desktop",
-    "productName": "WeiPython Manager",
-    "executableName": "WeiPython",
-    "copyright": "© 尉缭子科技",
-    "icon": "build/icon.ico",
-    "asar": false,
-    "npmRebuild": false,
-    "electronDist": "node_modules/electron/dist",
-    "directories": {
-      "output": "dist"
-    },
-    "extraFiles": [
-      {
-        "from": "build/icon.ico",
-        "to": "icon.ico"
-      }
-    ],
-    "files": [
-      "electron/**/*",
-      "public/**/*",
-      "src/**/*",
-      "package.json"
-    ],
-    "win": {
-      "signAndEditExecutable": true,
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        }
-      ],
-      "artifactName": "WeiPython-Setup-${version}.${ext}"
-    },
-    "nsis": {
-      "oneClick": false,
-      "perMachine": true,
-      "selectPerMachineByDefault": true,
-      "allowToChangeInstallationDirectory": true,
-      "shortcutName": "WeiPython Manager",
-      "uninstallDisplayName": "WeiPython Manager",
-      "installerIcon": "build/installerIcon.ico",
-      "uninstallerIcon": "build/uninstallerIcon.ico",
-      "installerHeaderIcon": "build/installerHeaderIcon.ico",
-      "installerHeader": "build/installerHeader.bmp",
-      "installerSidebar": "build/installerSidebar.bmp",
-      "uninstallerSidebar": "build/installerSidebar.bmp",
-      "include": "build/installer.nsh",
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
-    }
+  "dependencies": {
+    "@tauri-apps/api": "^2.8.0",
+    "pinia": "^3.0.3",
+    "vue": "^3.5.18",
+    "vue-router": "^5.0.0"
   }
 }

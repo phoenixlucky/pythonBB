@@ -1,13 +1,13 @@
-# 🐍 WeiPython · 尉Python环境管理器
+# 🐍 WJ Python管理大师
 
-> 基于 Node.js 与 Electron 的本地桌面工具，统一管理 Python、Conda、venv 与 pip 包操作。
+> 基于 Tauri 2、Rust 与 Vue 3 的纯本地桌面客户端，统一管理 Python、Conda、venv 与 pip 包操作。
 
-![Version](https://img.shields.io/badge/version-2.8.7-2ea44f)
+![Version](https://img.shields.io/badge/version-3.0.0-2ea44f)
 ![Platform](https://img.shields.io/badge/platform-Windows-0078d6)
-![Stack](https://img.shields.io/badge/stack-Node.js%20%2B%20Electron-339933)
+![Stack](https://img.shields.io/badge/stack-Tauri%202%20%2B%20Rust%20%2B%20Vue%203-2563eb)
 ![License](https://img.shields.io/badge/License-GPLv3-blue.svg)
 
-尉Python环境管理器是一个基于 **Node.js 与 Electron** 的本地桌面工具，用来统一管理 Python、Conda、venv 与 pip 包操作。项目采用 **本地 HTTP 服务 + Electron 桌面壳** 的结构，适合在 Windows 环境下直接打包为 `exe` 安装程序。
+WJ Python管理大师是一个基于 **Tauri 2 + Rust + Vue 3** 的纯本地桌面客户端，用来统一管理 Python、Conda、venv 与 pip 包操作。
 
 ---
 
@@ -15,19 +15,18 @@
 
 | 领域 | 能力 |
 |------|------|
-| 🖥️ 概览 | 系统状态总览、一键升级系统 Node.js |
+| 🖥️ 概览 | 系统状态总览 |
 | 🚀 初始化配置 | 首次运行向导、Miniconda 安装与升级 |
 | 🧪 Conda | 环境创建 / 克隆 / 删除、YAML 导入导出、软件源切换、Python 版本查询 |
 | 🐍 Python | 本机 Python 扫描、Conda 环境 Python 无损升级 |
-| 📦 venv | 虚拟环境创建、删除 |
-| 🧩 包管理 | 安装 / 升级 / 卸载 / 批量升级 / requirements 安装、pip 源选择 |
+| 📦 venv / uv | 标准库 venv 与 uv 虚拟环境创建、删除 |
+| 🧩 包管理 | 安装 / 升级 / 卸载 / 批量升级 / requirements 安装、pip/uv 源选择 |
 | 📋 日志 | 统一运行日志面板、活跃进程监控 |
 | 🎨 外观 | 自定义背景壁纸、首页标语与整体配色 |
 
 ### 🖥️ 概览面板
 
-- 一键展示系统核心状态：Node.js、npm、Conda、Python 版本一览
-- 一键**升级系统 Node.js**：优先调用 `nvm install latest` + `nvm use <version>`，未检测到 nvm 时自动回退 `winget upgrade --id OpenJS.NodeJS.LTS`
+- 一键展示系统核心状态：Conda、Python 版本一览
 
 ### 🚀 初始化配置
 
@@ -52,6 +51,8 @@
 ### 📦 venv 虚拟环境
 
 - 创建虚拟环境：指定名称与目标目录，可选指定 Python 路径
+- 创建工具可选 Python 标准库 `venv` 或 `uv`；uv 环境自动使用 `uv pip` 管理包
+- 自动检测 uv 版本；未安装 uv 时保留标准库 venv 流程
 - 删除虚拟环境
 
 ### 🧩 包管理
@@ -73,29 +74,44 @@
 - **自定义背景壁纸**：导入本地图片作为背景（支持 png / jpeg / webp / bmp / gif / avif，≤20MB，自动压缩至最长边 2560px 并转为 webp 格式减小体积），或一键恢复默认壁纸
 - **首页标语文字**：自定义首页标语（最多 60 字），可恢复默认
 - **整体配色**：主色 / 辅助色 / 文字色三档颜色自由调整，可一键恢复默认配色
-- **持久化**：外观配置通过 `GET/PUT /api/skin` 持久化至本机用户数据目录 `userData/skin.json`（随机端口下重启不丢失），支持增量合并与并发写保护；`localStorage` 作为兜底并自动回写
-- 入口：侧边栏「🎨 外观设置」按钮或菜单栏「外观设置」子菜单（打开外观设置 / 导入背景壁纸 / 恢复默认壁纸）
+- **持久化**：外观配置通过 Rust storage service 持久化至本机用户配置目录，重启不丢失
+- 入口：客户端侧边栏「客户端设置」面板
 - 所有外观设置仅保存在本机，数据不离开本地
 
 ---
 
 ## 🚀 快速开始
 
-> **环境要求：Node.js ≥ 24**（推荐通过 [nvm-windows](https://github.com/coreybutler/nvm-windows) 管理）。项目根目录已提供 `.nvmrc`，在项目目录执行 `nvm use` 即可自动切换到 Node 24。
+### Tauri 2 + Vue 3 迁移版本
+
+仓库当前使用 Tauri 2.11+ / Rust / Vue 3.5 / TypeScript / Vite 8：
+
+```bash
+npm install
+npm run tauri:dev
+```
+
+客户端完全基于 Tauri：Vue 只通过 `invoke` 调用 Rust commands，Rust service 直接访问本机 Python、Conda、文件系统和操作系统 API，不启动 HTTP 服务，也不提供网页入口。Rust 代码按 `domain → services → commands` 分层。
 
 | 命令 | 说明 |
 |------|------|
-| `nvm use` | 按 `.nvmrc` 切换到 Node 24 |
+| `npm run frontend:dev` | 仅启动 Vue 前端预览 |
+| `npm run frontend:build` | 构建 Vue 前端 |
+| `npm run tauri:dev` | 启动 Tauri 桌面开发版 |
+| `npm run tauri:build` | 构建 Tauri 桌面安装包 |
+
+> 只有开发和打包阶段需要 Node.js ≥ 24；发布后的 Tauri 客户端不包含也不依赖 Node.js 运行时。
+
+| 命令 | 说明 |
+|------|------|
 | `npm install` | 安装依赖 |
-| `npm run web` | 启动本地 Web 服务，浏览器访问 `http://localhost:3210` |
-| `npm run desktop` | 启动 Electron 桌面版（先启动内置本地服务，再打开窗口） |
+| `npm run tauri:dev` | 启动 Tauri 桌面开发版 |
+| `npm run tauri:build` | 构建 Tauri 客户端安装包 |
 | `npm test` | 运行测试 |
 
 ```bash
-nvm use             # 切换到 Node 24（如未安装：nvm install 24 && nvm use）
 npm install
-npm run web        # 浏览器访问 http://localhost:3210
-npm run desktop    # 或直接启动桌面版
+npm run tauri:dev
 ```
 
 ---
@@ -105,25 +121,17 @@ npm run desktop    # 或直接启动桌面版
 ### 生成 Windows 安装包
 
 ```bash
-npm run dist
+npm run tauri:build
 ```
 
-默认输出：`dist/WeiPython-Setup.exe`
-
-### 免安装目录产物
-
-```bash
-npm run pack
-```
-
-只生成解包后的目录（`win-unpacked`），不生成安装程序，速度更快。
+最终产物统一复制到项目根目录 `release/`，文件名使用英文，例如 `WJ-Python-Manager_3.0.0_x64-setup.exe`。
 
 ### 一键打包
 
-Windows 下可直接运行项目根目录的 **`一键打包.bat`**，交互式完成：
+Windows 下可直接运行项目根目录的 **`一键打包.bat`**，交互式更新版本并执行 Tauri 构建：
 
-1. 显示当前版本号，可输入新版本号（`X.Y.Z` 或 `X.Y.Z-beta.1`，由 `scripts/set-version.mjs` 校验并同步更新）
-2. 选择打包模式：① 完整安装包（NSIS） ② 免安装目录
+1. 显示当前版本号，可输入新版本号（`X.Y.Z` 或 `X.Y.Z-beta.1`）
+2. 生成 Tauri NSIS 安装包
 
 ---
 
@@ -131,15 +139,16 @@ Windows 下可直接运行项目根目录的 **`一键打包.bat`**，交互式�
 
 | 项目 | 值 |
 |------|-----|
-| 软件名称 | `尉Python环境管理器` |
+| 软件名称 | `WJ Python管理大师` |
 | 软件公司 | `尉缭子科技` |
-| 可执行文件 | `WeiPython.exe` |
-| 安装包文件名 | `WeiPython-Setup-2.9.2.exe` |
-| 默认安装目录 | `D:\Program Files\WeiPython` |
-| 安装模式 | 仅机器级安装（不再显示“仅为我安装”） |
+| 可执行文件 | `wj-python-manager.exe` |
+| 安装器产品名 | `WJ Python Manager` |
+| 安装包文件名 | `WJ Python Manager_*_x64-setup.exe` |
+| 当前用户默认路径 | `%LOCALAPPDATA%\WJ Python Manager` |
+| 安装方式 | English NSIS；支持 Current User / All Users 全局安装 |
 | GitHub 仓库 | <https://github.com/phoenixlucky/WeiPython> |
 
-相关配置：`package.json` · `build/installer.nsh` · `build/icon.ico`
+相关配置：`package.json` · `src-tauri/tauri.conf.json` · `src-tauri/Cargo.toml`
 
 ---
 
@@ -157,8 +166,9 @@ Windows 下可直接运行项目根目录的 **`一键打包.bat`**，交互式�
 
 1. 进入 `虚拟环境` 页面
 2. 输入环境名称和目标目录
-3. 可选填写 Python 路径
-4. 点击创建
+3. 选择 `Python 标准库 venv` 或 `uv`
+4. 可选填写 Python 路径
+5. 点击创建
 
 ### 🧩 包管理
 
@@ -168,29 +178,16 @@ Windows 下可直接运行项目根目录的 **`一键打包.bat`**，交互式�
 4. 执行安装、升级、卸载、查询信息，或从指定 requirements 文件安装
 5. 安装/升级前可切换 pip 下载源（官方 / 清华 / 阿里云 / 中科大 / 自定义）
 
-### ⚡ 升级 Node.js
-
-1. 进入 `概览` 页面
-2. 点击 `升级 Node.js`
-3. 确认后优先调用 `nvm install latest` 与 `nvm use <version>`；未检测到 nvm 时调用 `winget upgrade --id OpenJS.NodeJS.LTS`
-4. 完成后概览会刷新系统 Node 与 npm 版本
-
-> 💡 说明：桌面版 Electron 内置的 Node 版本随应用安装包更新；此功能升级的是**系统 Node.js**，不会改变当前已运行 Electron 进程内的 Node 版本。
-
 ---
 
 ## 📁 项目结构
 
 ```text
-WeiPython/
-├── electron/                   # Electron 主进程与预加载脚本
-├── public/                     # 前端静态资源
-├── src/                        # 本地 HTTP 服务与业务逻辑
-├── test/                       # Node.js 测试
-├── scripts/                    # 项目维护脚本
-├── build/                      # 安装器图标、侧边图、NSIS 定制脚本
-├── package.json                # npm 脚本与 electron-builder 配置
-├── 一键打包.bat                # Windows 交互式打包入口
+WJ-Python-Manager/
+├── frontend/                   # Vue 3 + TypeScript + Vite 前端
+├── src-tauri/                  # Rust domain / services / commands
+├── scripts/set-version.mjs    # 开发期版本同步脚本
+├── package.json                # Tauri 前端脚本
 └── README.md
 ```
 
@@ -212,5 +209,5 @@ WeiPython/
 
 - 当前项目主要面向 **Windows** 使用场景
 - Conda 与 pip 的实际执行结果依赖本机环境权限、网络和安装状态
-- Node.js 升级依赖本机已启用 `nvm-windows` 或 `winget`，可能需要管理员权限；重新打开终端后 PATH 才会刷新
-- 如需微调安装器默认目录、图标或品牌资源，可直接修改 `build/` 目录中的资源和 NSIS 配置
+- 发布客户端只依赖用户本机的 Python、Conda、venv/uv 与 pip 环境
+- 如需微调安装器默认目录、图标或品牌资源，可直接修改 `src-tauri/tauri.conf.json` 与 `build/` 目录中的资源

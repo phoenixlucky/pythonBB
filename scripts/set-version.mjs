@@ -1,5 +1,5 @@
 // ============================================================
-// set-version.mjs — WeiPython 版本号统一管理
+// set-version.mjs — WJ Python管理大师版本号统一管理
 // 用法：
 //   node scripts/set-version.mjs            → 打印当前版本号
 //   node scripts/set-version.mjs 2.8.0      → 设置新版本并同步所有文件
@@ -13,7 +13,8 @@ import path from "node:path";
 const ROOT = process.cwd();
 const PKG_PATH = path.join(ROOT, "package.json");
 const LOCK_PATH = path.join(ROOT, "package-lock.json");
-const HTML_PATH = path.join(ROOT, "public", "index.html");
+const TAURI_CONFIG_PATH = path.join(ROOT, "src-tauri", "tauri.conf.json");
+const CARGO_TOML_PATH = path.join(ROOT, "src-tauri", "Cargo.toml");
 const README_PATH = path.join(ROOT, "README.md");
 
 // 版本号格式：X.Y.Z 或带预发布后缀（如 2.8.0-beta.1）
@@ -76,20 +77,29 @@ function syncVersionToFiles(version) {
     }
   }
 
-  // 2. public/index.html：所有 vX.Y.Z 硬编码
-  if (fs.existsSync(HTML_PATH)) {
-    const { text, hadBom } = readTextPreservingBom(HTML_PATH);
-    const updated = text.replace(/v\d+\.\d+\.\d+/g, `v${version}`);
-    if (updated !== text) {
-      writeTextPreservingBom(HTML_PATH, updated, hadBom);
-      touched.push("public/index.html");
+  // 2. src-tauri/tauri.conf.json：桌面客户端版本
+  if (fs.existsSync(TAURI_CONFIG_PATH)) {
+    const config = readJson(TAURI_CONFIG_PATH);
+    if (config.version !== version) {
+      writeJson(TAURI_CONFIG_PATH, { ...config, version });
+      touched.push("src-tauri/tauri.conf.json");
     }
   }
 
-  // 3. README.md：安装包文件名
+  // 3. Cargo.toml：Rust 客户端版本
+  if (fs.existsSync(CARGO_TOML_PATH)) {
+    const { text, hadBom } = readTextPreservingBom(CARGO_TOML_PATH);
+    const updated = text.replace(/(^version\s*=\s*")[^"]+(")/m, `$1${version}$2`);
+    if (updated !== text) {
+      writeTextPreservingBom(CARGO_TOML_PATH, updated, hadBom);
+      touched.push("src-tauri/Cargo.toml");
+    }
+  }
+
+  // 4. README.md：徽章和文档版本
   if (fs.existsSync(README_PATH)) {
     const { text, hadBom } = readTextPreservingBom(README_PATH);
-    const updated = text.replace(/WeiPython-Setup-\d+\.\d+\.\d+\.exe/g, `WeiPython-Setup-${version}.exe`);
+    const updated = text.replace(/version-[0-9]+\.[0-9]+\.[0-9]+/g, `version-${version}`);
     if (updated !== text) {
       writeTextPreservingBom(README_PATH, updated, hadBom);
       touched.push("README.md");
