@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue";
-import { invokeCommand } from "@/lib/tauri";
+import { describeError, invokeCommand } from "@/lib/tauri";
 import { useAppStore } from "@/stores/app";
 import { useWorkspaceStore } from "@/stores/workspace";
 
@@ -65,7 +65,7 @@ async function refresh() {
     if (!form.installPath) form.installPath = status.value.recommendedInstallPath;
     await Promise.all([app.refresh().catch(() => undefined), workspace.refreshAll().catch(() => undefined)]);
   } catch (cause) {
-    workspace.error = cause instanceof Error ? cause.message : String(cause);
+    workspace.error = describeError(cause, "检测初始化状态失败");
   }
 }
 

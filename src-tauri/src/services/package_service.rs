@@ -39,7 +39,7 @@ mod tests {
 async fn run_pip(target: &EnvironmentTarget, args: Vec<String>) -> Result<crate::services::process_service::ProcessOutput, String> {
     let python = target_path(target)?;
     let (program, mut command_args) = if target.manager.as_deref() == Some("uv") {
-        ("uv".to_string(), vec!["pip".into()])
+        (crate::services::process_service::resolve_program("uv").await.ok_or("未检测到 uv，请先安装或在设置中配置 uv 路径")?, vec!["pip".into()])
     } else {
         (python, vec!["-m".into(), "pip".into()])
     };

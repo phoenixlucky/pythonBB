@@ -1,6 +1,6 @@
 import { computed, ref } from "vue";
 import { defineStore } from "pinia";
-import { invokeCommand } from "@/lib/tauri";
+import { describeError, invokeCommand } from "@/lib/tauri";
 import type { ActiveProcess, CondaEnvironment, EnvironmentTarget, OperationResult, PackageInfo, TaskSnapshot, VirtualEnvironment } from "@/types";
 
 export const useWorkspaceStore = defineStore("workspace", () => {
@@ -25,7 +25,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     pending.value++;
     error.value = "";
     try { return await action(); }
-    catch (cause) { error.value = cause instanceof Error ? cause.message : String(cause); }
+    catch (cause) { error.value = describeError(cause); }
     finally { pending.value--; }
   }
 
@@ -35,8 +35,10 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   }
 
   async function loadConda() { const value = await run(() => invokeCommand<CondaEnvironment[]>("list_conda_environments")); if (value) conda.value = value; }
-  async function loadVenvs() { const value = await run(() => invokeCommand<VirtualEnvironment[]>("list_virtual_environments")); if (value) venvs.value = value; }
+  async function loadVenvs(lastDirectory = "") { const value = await run(() => invokeCommand<VirtualEnvironment[]>("list_virtual_environments", { lastDirectory: lastDirectory.trim() || null })); if (value) venvs.value = value; }
   async function loadPythonVersions() { const value = await run(() => invokeCommand<string[]>("discover_python_versions")); if (value) pythonVersions.value = value; }
+  async function uninstallPython(path: string) { const task = await runTask(() => invokeCommand<TaskSnapshot>("start_uninstall_python", { path })); if (task?.status === "completed") await refreshAll(); }
+  async function startSystemPythonUpgrade(path: string) { const task = await runTask(() => invokeCommand<TaskSnapshot>("start_upgrade_python", { path })); if (task?.status === "completed") await loadPythonVersions(); }
   async function createConda(payload: Record<string, unknown>) { const value = await run(() => invokeCommand<OperationResult>("create_conda_environment", { request: payload })); if (value) { showResult(value); await loadConda(); } }
   async function deleteConda(name: string) { const value = await run(() => invokeCommand<OperationResult>("delete_conda_environment", { name })); if (value) { showResult(value); await loadConda(); } }
   async function exportConda(payload: Record<string, unknown>) { const value = await run(() => invokeCommand<OperationResult>("export_conda_environment", { request: payload })); if (value) showResult(value); }
@@ -60,7 +62,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       output.value = [task.command, task.output].filter(Boolean).join("\n\n");
       await loadProcesses().catch(() => undefined);
     }
-    if (task.status === "completed") {
+    if (task.status === "completed" || task.status === "cancelled") {
       message.value = task.message;
       error.value = "";
     } else {
@@ -73,8 +75,12 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     pending.value++;
     error.value = "";
     try { return await waitForTask(await start()); }
-    catch (cause) { error.value = cause instanceof Error ? cause.message : String(cause); return undefined; }
+    catch (cause) { error.value = describeError(cause, "后台任务启动失败"); return undefined; }
     finally { pending.value--; }
+  }
+  async function cancelCurrentTask() {
+    if (!currentTask.value || currentTask.value.status !== "running") return;
+    await invokeCommand("cancel_operation_task", { taskId: currentTask.value.taskId });
   }
   async function startSetup(payload: Record<string, unknown>) { const task = await runTask(() => invokeCommand<TaskSnapshot>("start_initialize_environment", { request: payload })); if (task?.status === "completed") await refreshAll(); }
   async function startPythonUpgrade(name: string, version: string, channel: string) { const task = await runTask(() => invokeCommand<TaskSnapshot>("start_upgrade_conda_python", { name, version, channel })); if (task?.status === "completed") await loadConda(); }
@@ -82,5 +88,5 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   function clearLog() { message.value = ""; error.value = ""; output.value = ""; currentTask.value = null; }
 
   async function refreshAll() { await Promise.all([loadConda(), loadVenvs(), loadPythonVersions()]); }
-  return { conda, venvs, packages, selectedTarget, pythonVersions, targets, busy, message, error, output, activeProcesses, currentTask, loadConda, loadVenvs, loadPythonVersions, loadProcesses, createConda, deleteConda, exportConda, exportAllConda, upgradeConda, installUv, uninstallUv, importConda, createVenv, deleteVenv, loadPackages, packageAction, startSetup, startPythonUpgrade, clearLog, refreshAll };
+  return { conda, venvs, packages, selectedTarget, pythonVersions, targets, busy, message, error, output, activeProcesses, currentTask, loadConda, loadVenvs, loadPythonVersions, uninstallPython, startSystemPythonUpgrade, loadProcesses, createConda, deleteConda, exportConda, exportAllConda, upgradeConda, installUv, uninstallUv, importConda, createVenv, deleteVenv, loadPackages, packageAction, startSetup, startPythonUpgrade, cancelCurrentTask, clearLog, refreshAll };
 });

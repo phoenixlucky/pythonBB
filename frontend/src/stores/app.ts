@@ -1,6 +1,6 @@
 import { computed, ref } from "vue";
 import { defineStore } from "pinia";
-import { invokeCommand } from "@/lib/tauri";
+import { describeError, invokeCommand } from "@/lib/tauri";
 import type { AppSettings, Overview } from "@/types";
 
 const defaultSettings: AppSettings = {
@@ -31,7 +31,7 @@ export const useAppStore = defineStore("app", () => {
     try {
       overview.value = await invokeCommand<Overview>("get_overview");
     } catch (cause) {
-      error.value = cause instanceof Error ? cause.message : String(cause);
+      error.value = describeError(cause, "刷新失败");
     } finally {
       loading.value = false;
     }
@@ -50,7 +50,7 @@ export const useAppStore = defineStore("app", () => {
     settings.value = { ...settings.value, ...patch };
     const snapshot = { ...settings.value };
     saveQueue = saveQueue.catch(() => undefined).then(() => invokeCommand("save_settings", { settings: snapshot }));
-    try { await saveQueue; } catch (cause) { error.value = String(cause); }
+    try { await saveQueue; } catch (cause) { error.value = describeError(cause, "设置保存失败"); }
   }
 
   return { overview, settings, loading, error, lastRefreshLabel, refresh, loadSettings, saveSettings };

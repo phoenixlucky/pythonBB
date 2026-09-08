@@ -58,12 +58,13 @@ export interface ActiveProcess {
   pid: number;
   command: string;
   startedAt: number;
+  taskId?: string;
 }
 
 export interface TaskSnapshot {
   taskId: string;
   taskType: string;
-  status: "running" | "completed" | "failed";
+  status: "running" | "completed" | "failed" | "cancelled";
   message: string;
   progress: number;
   output: string;

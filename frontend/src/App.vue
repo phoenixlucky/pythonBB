@@ -9,6 +9,7 @@ import SetupPanel from "@/components/SetupPanel.vue";
 import SettingsPanel from "@/components/SettingsPanel.vue";
 import UvPanel from "@/components/UvPanel.vue";
 import { useWorkspaceStore } from "@/stores/workspace";
+import { isTauri } from "@/lib/tauri";
 
 const app = useAppStore();
 const workspace = useWorkspaceStore();
@@ -23,14 +24,22 @@ const panels = [
   { id: "packages", icon: "λ", label: "包管理" },
   { id: "settings", icon: "⚙", label: "客户端设置" },
 ];
+const navGroups = [
+  { label: "工作区", items: ["overview"] },
+  { label: "运行时", items: ["setup", "conda", "python", "uv"] },
+  { label: "环境与包", items: ["venv", "packages"] },
+  { label: "系统", items: ["settings"] },
+];
 let processTimer = 0;
 
 onMounted(async () => {
   await app.loadSettings();
-  await app.refresh();
-  await workspace.refreshAll();
-  await workspace.loadProcesses();
-  processTimer = window.setInterval(() => { void workspace.loadProcesses(); }, 1000);
+  await Promise.all([app.refresh(), workspace.loadVenvs(), workspace.loadPythonVersions()]);
+  if (app.overview) workspace.conda = app.overview.environments;
+  if (isTauri) {
+    await workspace.loadProcesses().catch(() => undefined);
+    processTimer = window.setInterval(() => { void workspace.loadProcesses().catch(() => undefined); }, 1000);
+  }
 });
 
 onUnmounted(() => { if (processTimer) window.clearInterval(processTimer); });
@@ -43,11 +52,11 @@ onUnmounted(() => { if (processTimer) window.clearInterval(processTimer); });
         <div class="brand-mark"><span class="brand-icon"><img src="/app-icon.png" alt="" /></span><span class="brand-copy"><strong>WJ Python</strong><small>管理大师</small></span></div>
         <p>本地优先的 Python 环境控制台</p>
       </div>
-      <div class="sidebar-section">
-        <span class="section-label">工作区</span>
+      <div v-for="(group, groupIndex) in navGroups" :key="group.label" class="sidebar-section" :class="{ 'sidebar-section-first': groupIndex === 0 }">
+        <span class="section-label">{{ group.label }}</span>
         <nav>
-          <button v-for="panel in panels" :key="panel.id" :class="{ active: activePanel === panel.id }" @click="activePanel = panel.id">
-            <span class="nav-icon">{{ panel.icon }}</span>{{ panel.label }}
+          <button v-for="panelId in group.items" :key="panelId" :class="{ active: activePanel === panelId }" :aria-label="panels.find((panel) => panel.id === panelId)?.label" :title="panels.find((panel) => panel.id === panelId)?.label" @click="activePanel = panelId">
+            <span class="nav-icon">{{ panels.find((panel) => panel.id === panelId)?.icon }}</span><span class="nav-label">{{ panels.find((panel) => panel.id === panelId)?.label }}</span>
           </button>
         </nav>
       </div>
@@ -64,6 +73,7 @@ onUnmounted(() => { if (processTimer) window.clearInterval(processTimer); });
         <div class="runtime-chips">
           <span>{{ app.overview?.runtime.python || "Python --" }}</span>
           <span>{{ app.overview?.runtime.conda || "Conda --" }}</span>
+          <span class="target-chip">环境 {{ workspace.targets.length }}</span>
         </div>
       </header>
 
@@ -76,21 +86,27 @@ onUnmounted(() => { if (processTimer) window.clearInterval(processTimer); });
         <div class="stat-grid">
           <article><span>Python</span><strong>{{ app.overview?.runtime.python || "--" }}</strong><small>系统默认解释器</small></article>
           <article><span>Conda 环境</span><strong>{{ app.overview?.environments.length ?? "--" }}</strong><small>已发现环境</small></article>
+          <article><span>虚拟环境</span><strong>{{ workspace.venvs.length }}</strong><small>包含 uv 创建的环境</small></article>
           <article><span>平台</span><strong>{{ app.overview?.runtime.platform || "--" }}</strong><small>操作系统</small></article>
         </div>
         <div class="dashboard-grid">
           <article class="card environment-card">
-            <div class="card-heading"><div><span class="eyebrow">Environments</span><h2>Conda 环境</h2></div><span>{{ app.lastRefreshLabel }}</span></div>
+            <div class="card-heading"><div><span class="eyebrow">Environments</span><h2>可管理环境</h2></div><span>{{ app.lastRefreshLabel }}</span></div>
             <div v-if="!app.overview?.environments.length && !app.loading" class="empty">没有发现 Conda 环境</div>
             <div v-for="environment in app.overview?.environments" :key="environment.prefix" class="environment-row">
               <div class="env-avatar">py</div><div class="env-main"><strong>{{ environment.name }}</strong><span>{{ environment.prefix }}</span></div>
               <div class="env-meta"><strong>{{ environment.python }}</strong><span>{{ environment.packageCount }} 个包</span></div>
               <span v-if="environment.active" class="active-badge">当前</span>
             </div>
+            <div v-if="workspace.venvs.length" class="environment-divider"><span>虚拟环境</span><small>{{ workspace.venvs.length }} 个</small></div>
+            <div v-for="environment in workspace.venvs.slice(0, 4)" :key="environment.path" class="environment-row">
+              <div class="env-avatar venv-avatar">{{ environment.manager === "uv" ? "uv" : "venv" }}</div><div class="env-main"><strong>{{ environment.name }}</strong><span>{{ environment.path }}</span></div>
+              <div class="env-meta"><strong>{{ environment.pythonVersion }}</strong><span>{{ environment.manager }}</span></div>
+            </div>
           </article>
           <article class="card next-card">
-            <span class="eyebrow">Next step</span><h2>继续管理环境</h2><p>Conda、虚拟环境与包管理模块会沿用同一套 Rust 命令层，操作过程可追踪且不会离开本机。</p>
-            <button class="secondary" @click="activePanel = 'conda'">打开 Conda</button>
+            <span class="eyebrow">Next step</span><h2>继续管理环境</h2><p>所有环境都可以进入同一套包管理流程。先选择环境类型，再执行创建、升级或安装。</p>
+            <div class="next-actions"><button class="secondary" @click="activePanel = 'conda'">管理 Conda</button><button class="secondary" @click="activePanel = 'venv'">创建 venv / uv</button></div>
           </article>
         </div>
       </section>
@@ -106,8 +122,10 @@ onUnmounted(() => { if (processTimer) window.clearInterval(processTimer); });
         <span class="eyebrow">// {{ activePanel }}</span><h1>{{ panels.find((panel) => panel.id === activePanel)?.label }}</h1>
         <div class="card"><h2>模块已接入迁移骨架</h2><p>这里将接入 Rust domain/service 能力。当前基础链路已可运行。</p><button class="secondary" @click="activePanel = 'overview'">返回概览</button></div>
       </section>
-      <div v-if="workspace.error || workspace.message || workspace.output || workspace.currentTask" class="operation-log">
-        <div class="log-head"><strong>{{ workspace.error || workspace.message || workspace.currentTask?.message || "最近一次操作" }}</strong><span v-if="workspace.currentTask?.status === 'running'">{{ workspace.currentTask.progress }}%</span><button class="link-button" @click="workspace.clearLog">清空</button></div>
+      <div v-if="workspace.error || workspace.message || workspace.output || workspace.currentTask" class="operation-log" :class="{ 'operation-error': workspace.error, 'operation-running': workspace.currentTask?.status === 'running' }" role="status" aria-live="polite">
+        <div class="log-head"><span class="log-status-dot"></span><strong>{{ workspace.error || workspace.message || workspace.currentTask?.message || "最近一次操作" }}</strong><span v-if="workspace.currentTask?.status === 'running'">{{ workspace.currentTask.progress }}%</span><button v-if="workspace.currentTask?.status === 'running'" class="link-button" @click="workspace.cancelCurrentTask">取消任务</button><button class="link-button" @click="workspace.clearLog">清空</button></div>
+        <div v-if="workspace.currentTask?.status === 'running'" class="task-progress"><span :style="{ width: `${workspace.currentTask.progress}%` }"></span></div>
+        <small v-if="workspace.activeProcesses.length" class="process-note">正在运行 {{ workspace.activeProcesses.length }} 个本地进程</small>
         <pre v-if="workspace.output">{{ workspace.output }}</pre>
       </div>
     </main>
@@ -116,11 +134,18 @@ onUnmounted(() => { if (processTimer) window.clearInterval(processTimer); });
 
 <style scoped>
 .button-row { display: flex; gap: 8px; align-items: center; }
-.operation-log { margin: 0 44px 24px; padding: 14px 16px; border: 1px solid #dfe6ef; border-radius: 10px; background: #fff; color: #556479; font-size: 12px; }
+.operation-log { position: sticky; bottom: 16px; z-index: 5; margin: 0 44px 24px; padding: 14px 16px; border: 1px solid #dfe6ef; border-radius: 10px; background: rgba(255,255,255,.96); box-shadow: 0 12px 28px rgba(15,23,42,.12); color: #556479; font-size: 12px; }
 .log-head { display: flex; align-items: center; gap: 12px; }
 .log-head span { color: #8490a3; margin-left: auto; }
 .log-head .link-button { margin-left: 8px; }
 .operation-log strong { color: #2563eb; }
+.operation-error strong { color: #be123c; }
+.log-status-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: #22c55e; }
+.operation-running .log-status-dot { background: #f59e0b; }
+.operation-error .log-status-dot { background: #e11d48; }
+.task-progress { height: 5px; overflow: hidden; margin-top: 10px; border-radius: 99px; background: #e8eef7; }
+.task-progress span { display: block; height: 100%; border-radius: inherit; background: var(--client-primary, #2563eb); transition: width .2s ease; }
+.process-note { display: block; margin-top: 8px; color: #8490a3; }
 .operation-log pre { max-height: 220px; overflow: auto; margin: 10px 0 0; white-space: pre-wrap; font: 11px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; color: #66758b; }
 :global(.app-shell) { background-position: center; background-size: cover; background-attachment: fixed; }
 :global(.primary) { background: var(--client-primary, #2563eb); }

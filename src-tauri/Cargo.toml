@@ -1,6 +1,6 @@
 [package]
 name = "wj-python-manager"
-version = "3.0.0"
+version = "3.0.1"
 description = "WJ Python管理大师 local Python environment manager"
 authors = ["尉缭子科技"]
 edition = "2021"

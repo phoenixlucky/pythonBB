@@ -1,6 +1,6 @@
-use crate::domain::models::{Overview, RuntimeInfo};
-use crate::services::conda_service;
-use crate::services::process_service::{resolve_program, run};
+use crate::domain::models::{OperationResult, Overview, RuntimeInfo};
+use crate::services::{conda_service, venv_service};
+use crate::services::process_service::{failure, resolve_program, run};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -94,6 +94,110 @@ pub async fn discover_python_versions() -> Vec<String> {
     versions
 }
 
+pub async fn uninstall_python(path: String) -> Result<OperationResult, String> {
+    let requested = PathBuf::from(path.trim());
+    if !requested.is_file() {
+        return Err("选中的 Python 路径不存在，无法卸载".into());
+    }
+
+    if let Ok(environments) = conda_service::list().await {
+        for environment in environments {
+            let prefix = PathBuf::from(&environment.prefix);
+            let executable = python_executable(&prefix);
+            if same_path(&requested, &executable) {
+                return conda_service::remove(environment.name).await;
+            }
+        }
+    }
+
+    for environment in venv_service::list(None).await {
+        let root = PathBuf::from(&environment.path);
+        let executable = if cfg!(windows) {
+            root.join("Scripts").join("python.exe")
+        } else {
+            root.join("bin").join("python")
+        };
+        if same_path(&requested, &executable) {
+            return venv_service::remove(environment.path).await;
+        }
+    }
+
+    Err("该 Python 属于系统安装或外部管理器，不能由本程序直接卸载；请从系统应用或原管理器中卸载".into())
+}
+
+pub async fn upgrade_python(path: String) -> Result<OperationResult, String> {
+    if !cfg!(windows) {
+        return Err("普通系统 Python 的一键升级当前仅支持 Windows；请使用原安装器或系统包管理器升级".into());
+    }
+
+    let requested = PathBuf::from(path.trim());
+    if !requested.is_file() {
+        return Err("选中的 Python 路径不存在，无法升级".into());
+    }
+
+    if let Ok(environments) = conda_service::list().await {
+        for environment in environments {
+            let prefix = PathBuf::from(&environment.prefix);
+            if same_path(&requested, &python_executable(&prefix)) {
+                return Err("这是 Conda 环境，请使用“Conda Python 升级”入口".into());
+            }
+        }
+    }
+
+    for environment in venv_service::list(None).await {
+        let root = PathBuf::from(&environment.path);
+        let executable = if cfg!(windows) {
+            root.join("Scripts").join("python.exe")
+        } else {
+            root.join("bin").join("python")
+        };
+        if same_path(&requested, &executable) {
+            return Err("venv 不能直接替换底层 Python；请用目标 Python 重建虚拟环境并重新安装依赖".into());
+        }
+    }
+
+    let path_text = requested.to_string_lossy().to_ascii_lowercase();
+    if path_text.contains("\\.pyenv\\") || path_text.contains("\\.asdf\\") {
+        return Err("该 Python 由外部版本管理器维护，请使用 pyenv/asdf 升级".into());
+    }
+
+    let current = python_version_at(&requested).await.ok_or("无法读取选中的 Python 版本")?;
+    let (major, minor) = parse_python_major_minor(&current).ok_or("无法识别选中的 Python 版本")?;
+    let winget = resolve_program("winget").await.ok_or("未检测到 winget，请先安装 Windows App Installer")?;
+    let package_id = format!("Python.Python.{major}.{minor}");
+    let args = vec![
+        "upgrade".into(), "--id".into(), package_id.clone(), "--exact".into(),
+        "--silent".into(), "--accept-source-agreements".into(),
+        "--accept-package-agreements".into(), "--disable-interactivity".into(),
+    ];
+    let result = run(&winget, &args, None).await;
+    if !result.ok {
+        return Err(failure(&result, &format!("winget 未能升级 {package_id}")));
+    }
+
+    let actual = python_version_at(&requested).await.unwrap_or_default();
+    if actual == current {
+        return Err(format!("未检测到 Python {current} 的可用更新（winget 包：{package_id}）"));
+    }
+
+    Ok(OperationResult {
+        ok: true,
+        message: format!("系统 Python 已升级：{current} → {actual}"),
+        command: result.command,
+        output: result.stdout,
+    })
+}
+
+fn same_path(left: &Path, right: &Path) -> bool {
+    let normalize = |path: &Path| {
+        std::fs::canonicalize(path)
+            .unwrap_or_else(|_| path.to_path_buf())
+            .to_string_lossy()
+            .to_ascii_lowercase()
+    };
+    normalize(left) == normalize(right)
+}
+
 fn python_executable(directory: &Path) -> PathBuf {
     if cfg!(windows) { directory.join("python.exe") } else { directory.join("bin").join("python3") }
 }
@@ -146,9 +250,14 @@ async fn python_version_at(executable: &Path) -> Option<String> {
     (!version.is_empty()).then(|| version.to_string())
 }
 
+fn parse_python_major_minor(version: &str) -> Option<(u32, u32)> {
+    let mut parts = version.split('.');
+    Some((parts.next()?.parse().ok()?, parts.next()?.parse().ok()?))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::parse_python_launcher_paths;
+    use super::{parse_python_launcher_paths, parse_python_major_minor};
 
     #[tokio::test]
     #[ignore = "requires local Conda installation; read-only integration check"]
@@ -170,5 +279,11 @@ mod tests {
         assert_eq!(paths.len(), 2);
         assert_eq!(paths[0].to_string_lossy(), "C:\\Program Files\\Python313\\python.exe");
         assert_eq!(paths[1].to_string_lossy(), "C:\\Python312\\python.exe");
+    }
+
+    #[test]
+    fn parses_python_major_minor_for_winget_package() {
+        assert_eq!(parse_python_major_minor("3.13.7"), Some((3, 13)));
+        assert_eq!(parse_python_major_minor("Python 3.13"), None);
     }
 }

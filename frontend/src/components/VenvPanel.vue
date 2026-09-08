@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
-import { invokeCommand } from "@/lib/tauri";
+import { describeError, invokeCommand } from "@/lib/tauri";
 import { useWorkspaceStore } from "@/stores/workspace";
+import ConfirmDialog from "@/components/ConfirmDialog.vue";
 
 const workspace = useWorkspaceStore();
 const form = reactive({ name: "py-env", targetPath: "", pythonPath: "", manager: "venv" });
 const defaultDirectory = ref("");
+const scanDirectory = ref("");
 const uvPath = ref("");
+const showScanPanel = ref(false);
+const confirmRequest = ref<{ title: string; message: string; confirmLabel: string; action: () => Promise<void> } | null>(null);
 const nameEdited = ref(false);
 const pathEdited = ref(false);
 const finalPath = computed(() => {
@@ -39,20 +43,44 @@ async function create() {
   await workspace.createVenv(form);
   if (!workspace.error) regenerateDefaults();
 }
+function confirmDelete(path: string, name: string) {
+  confirmRequest.value = { title: `删除虚拟环境“${name}”？`, message: "环境中的包和数据将被移除，此操作无法撤销。", confirmLabel: "确认删除", action: async () => { await workspace.deleteVenv(path); } };
+}
 
 async function refreshUv() {
   uvPath.value = (await invokeCommand<string | null>("get_uv_path")) || "";
 }
 
+async function scan() {
+  showScanPanel.value = true;
+  await workspace.loadVenvs(scanDirectory.value);
+}
+
+async function copyPath(path: string) {
+  await navigator.clipboard.writeText(path);
+  workspace.error = "";
+  workspace.message = "环境路径已复制";
+}
+async function acceptConfirm() {
+  const request = confirmRequest.value;
+  confirmRequest.value = null;
+  if (request) await request.action();
+}
+
 onMounted(async () => {
-  const [directory] = await Promise.all([
-    invokeCommand<string>("get_default_virtual_environment_directory"),
-    workspace.loadVenvs(),
-    workspace.loadPythonVersions(),
-    refreshUv(),
-  ]);
-  defaultDirectory.value = directory;
-  regenerateDefaults();
+  try {
+    const [directory] = await Promise.all([
+      invokeCommand<string>("get_default_virtual_environment_directory"),
+      workspace.loadVenvs(),
+      workspace.loadPythonVersions(),
+      refreshUv(),
+    ]);
+    defaultDirectory.value = directory;
+    regenerateDefaults();
+  } catch (cause) {
+    workspace.error = describeError(cause, "读取虚拟环境设置失败");
+    regenerateDefaults();
+  }
 });
 </script>
 
@@ -60,7 +88,7 @@ onMounted(async () => {
   <section class="content">
     <div class="page-heading">
       <div><span class="eyebrow">// Virtual Environments</span><h1>虚拟环境</h1><p>使用 Python 标准库或 uv 创建和维护虚拟环境。</p></div>
-      <button class="secondary" @click="Promise.all([workspace.loadVenvs(), workspace.loadPythonVersions()])">刷新</button>
+      <div class="button-grid"><button class="secondary" @click="Promise.all([workspace.loadVenvs(), workspace.loadPythonVersions()])">刷新</button><button class="secondary" @click="showScanPanel = !showScanPanel">{{ showScanPanel ? "收起扫描" : "扫描目录" }}</button></div>
     </div>
     <div class="workspace-columns">
       <article class="card form-card">
@@ -70,15 +98,18 @@ onMounted(async () => {
         <p v-if="finalPath" class="hint">将创建到：{{ finalPath }}</p>
         <label>创建工具<select v-model="form.manager"><option value="venv">Python venv</option><option value="uv">uv</option></select></label>
         <div v-if="form.manager === 'uv'" class="uv-tools"><p class="hint">{{ uvPath ? '已检测到 uv：' + uvPath : '当前未检测到 uv，请前往“uv 管理”安装。' }}</p></div>
-        <label>Python 路径（可选）<select v-model="form.pythonPath"><option value="">自动检测系统 Python</option><option v-for="item in pythonOptions" :key="item.path" :value="item.path">{{ item.version }} · {{ item.path }}</option></select></label>
-        <p class="hint">留空时由程序自动选择系统 Python。</p>
+        <label>{{ form.manager === 'uv' ? 'Python 版本或路径（可选）' : 'Python 路径（可选）' }}<input v-model="form.pythonPath" list="python-options" :placeholder="form.manager === 'uv' ? '留空由 uv 自动选择并下载' : '留空时自动检测系统 Python'" /></label>
+        <datalist id="python-options"><option v-for="item in pythonOptions" :key="item.path" :value="item.path">{{ item.version }}</option></datalist>
+        <p class="hint">{{ form.manager === 'uv' ? 'uv 模式无需系统 Python；可填写 3.13、3.13.5 或解释器路径，找不到时 uv 会自动下载。' : '留空时由程序自动选择系统 Python。' }}</p>
         <button class="primary wide" :disabled="workspace.busy || !form.name || !form.targetPath || (form.manager === 'uv' && !uvPath)" @click="create">创建虚拟环境</button>
       </article>
       <article class="card">
-        <div class="card-heading"><div><span class="eyebrow">Inventory</span><h2>已发现环境</h2></div><span>{{ workspace.venvs.length }} 个</span></div>
-        <div v-if="!workspace.venvs.length" class="empty">未检测到 venv 环境</div>
-        <div v-for="item in workspace.venvs" :key="item.path" class="environment-row"><div class="env-avatar">venv</div><div class="env-main"><strong>{{ item.name }}</strong><span>{{ item.path }}</span></div><div class="env-meta"><strong>{{ item.pythonVersion }}</strong><span>{{ item.manager }}</span></div><button class="text-danger" @click="workspace.deleteVenv(item.path)">删除</button></div>
+        <div class="scan-toolbar"><div class="card-heading"><div><span class="eyebrow">Inventory</span><h2>已发现环境</h2></div><span>{{ workspace.venvs.length }} 个</span></div><button class="link-button" @click="showScanPanel = !showScanPanel">{{ showScanPanel ? "关闭" : "指定目录" }}</button></div>
+        <div v-if="showScanPanel" class="scan-panel"><input v-model="scanDirectory" placeholder="项目目录或 .venv 完整路径" /><p class="hint">扫描会保留固定目录和已登记环境，也会识别直接指定的 .venv。</p><button class="secondary" @click="scan">开始扫描</button></div>
+        <div v-if="!workspace.venvs.length" class="empty empty-action"><span>未检测到 venv 环境</span><small>可使用左侧表单创建，或指定一个项目目录进行扫描。</small><button class="link-button" @click="showScanPanel = true">指定扫描目录</button></div>
+        <div v-for="item in workspace.venvs" :key="item.path" class="environment-row"><div class="env-avatar">venv</div><div class="env-main"><strong>{{ item.name }}</strong><span>{{ item.path }}</span></div><div class="env-meta"><strong>{{ item.pythonVersion }}</strong><span>{{ item.manager }}</span></div><button class="copy-button" :title="`复制 ${item.path}`" :aria-label="`复制 ${item.name} 路径`" @click="copyPath(item.path)">复制</button><button class="text-danger" @click="confirmDelete(item.path, item.name)">删除</button></div>
       </article>
     </div>
   </section>
+  <ConfirmDialog v-if="confirmRequest" :open="true" :title="confirmRequest.title" :message="confirmRequest.message" :confirm-label="confirmRequest.confirmLabel" @confirm="acceptConfirm" @cancel="confirmRequest = null" />
 </template>

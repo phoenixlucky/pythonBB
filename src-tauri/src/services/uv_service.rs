@@ -23,7 +23,9 @@ pub async fn paths() -> Vec<String> {
     }
     let lookup = if cfg!(windows) { "where.exe" } else { "which" };
     let result = run(lookup, &[if cfg!(windows) { "uv.exe".into() } else { "uv".into() }], None).await;
-    candidates.extend(result.stdout.lines().map(str::trim).filter(|value| !value.is_empty()).map(str::to_owned));
+    candidates.extend(result.stdout.lines().map(str::trim).filter(|value| {
+        !value.is_empty() && !value.to_ascii_lowercase().contains("\\windowsapps\\")
+    }).map(str::to_owned));
     let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(PathBuf::from);
     if let Some(root) = home {
         let executable = if cfg!(windows) { "uv.exe" } else { "uv" };

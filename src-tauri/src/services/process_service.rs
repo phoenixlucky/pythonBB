@@ -27,6 +27,7 @@ pub struct ActiveProcess {
     pub pid: u32,
     pub command: String,
     pub started_at: u64,
+    pub task_id: Option<String>,
 }
 
 static ACTIVE_PROCESSES: OnceLock<Mutex<HashMap<u32, ActiveProcess>>> = OnceLock::new();
@@ -63,6 +64,9 @@ pub async fn run(program: &str, args: &[String], cwd: Option<&Path>) -> ProcessO
 
 pub async fn run_with_env(program: &str, args: &[String], cwd: Option<&Path>, envs: &[(&str, &str)]) -> ProcessOutput {
     let display = command_line(program, args);
+    if crate::services::task_service::is_cancelled() {
+        return ProcessOutput { ok: false, stdout: String::new(), stderr: "任务已取消".into(), command: display };
+    }
     let mut command = if needs_cmd(program) {
         let mut shell = Command::new("cmd.exe");
         shell.args(["/D", "/S", "/C"]).arg(&display);
@@ -85,7 +89,8 @@ pub async fn run_with_env(program: &str, args: &[String], cwd: Option<&Path>, en
     };
     let pid = child.id();
     if let Some(pid) = pid {
-        let _ = active_store().lock().map(|mut processes| processes.insert(pid, ActiveProcess { pid, command: display.clone(), started_at: unix_now() }));
+        let task_id = crate::services::task_service::current_task_id();
+        let _ = active_store().lock().map(|mut processes| processes.insert(pid, ActiveProcess { pid, command: display.clone(), started_at: unix_now(), task_id }));
     }
     crate::services::task_service::append_output(&format!("\n$ {display}\n"));
     let Some(stdout) = child.stdout.take() else {
@@ -101,7 +106,10 @@ pub async fn run_with_env(program: &str, args: &[String], cwd: Option<&Path>, en
         let (status, stdout, stderr) = tokio::try_join!(child.wait(), capture(stdout), capture(stderr))?;
         Ok::<_, std::io::Error>(std::process::Output { status, stdout, stderr })
     }).await.unwrap_or_else(|_| Err(std::io::Error::new(std::io::ErrorKind::TimedOut, format!("命令超时（{seconds} 秒）：{display}"))));
-    if result.is_err() { let _ = child.kill().await; }
+    if result.is_err() {
+        if let Some(pid) = pid { terminate_pid(pid); }
+        let _ = child.kill().await;
+    }
     if let Some(pid) = pid { let _ = active_store().lock().map(|mut processes| processes.remove(&pid)); }
     match result {
         Ok(output) => ProcessOutput {
@@ -117,6 +125,26 @@ pub async fn run_with_env(program: &str, args: &[String], cwd: Option<&Path>, en
 fn unix_now() -> u64 { std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|duration| duration.as_secs()).unwrap_or_default() }
 
 pub fn active_processes() -> Vec<ActiveProcess> { active_store().lock().map(|processes| processes.values().cloned().collect()).unwrap_or_default() }
+
+pub fn terminate_task_processes(task_id: &str) {
+    let pids = active_store().lock().map(|processes| processes.values().filter(|process| process.task_id.as_deref() == Some(task_id)).map(|process| process.pid).collect::<Vec<_>>()).unwrap_or_default();
+    for pid in pids { terminate_pid(pid); }
+}
+
+fn terminate_pid(pid: u32) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let _ = std::process::Command::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output();
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = std::process::Command::new("kill").args(["-TERM", &pid.to_string()]).output();
+    }
+}
 
 pub async fn resolve_program(name: &str) -> Option<String> {
     if name.eq_ignore_ascii_case("uv") {

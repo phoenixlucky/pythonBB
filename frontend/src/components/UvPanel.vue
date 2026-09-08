@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
-import { invokeCommand } from "@/lib/tauri";
+import { describeError, invokeCommand } from "@/lib/tauri";
 import { useWorkspaceStore } from "@/stores/workspace";
 
 const workspace = useWorkspaceStore();
@@ -22,7 +22,7 @@ async function refresh() {
     status.version = (await invokeCommand<string | null>("get_uv_version", { path: selectedUvPath.value || null })) || "";
     if (!form.installDirectory) form.installDirectory = await invokeCommand<string>("get_uv_default_directory");
   } catch (cause) {
-    workspace.error = cause instanceof Error ? cause.message : String(cause);
+    workspace.error = describeError(cause, "读取 uv 状态失败");
   } finally {
     loading.value = false;
   }
@@ -31,7 +31,14 @@ async function refresh() {
 async function selectUv(path: string) {
   selectedUvPath.value = path;
   status.path = path;
-  status.version = (await invokeCommand<string | null>("get_uv_version", { path })) || "";
+  try { status.version = (await invokeCommand<string | null>("get_uv_version", { path })) || ""; }
+  catch (cause) { workspace.error = describeError(cause, "读取 uv 版本失败"); }
+}
+
+async function copyPath(path: string) {
+  await navigator.clipboard.writeText(path);
+  workspace.error = "";
+  workspace.message = "uv 路径已复制";
 }
 
 async function install() {
@@ -78,12 +85,12 @@ onMounted(refresh);
       <article class="card setup-card">
         <div class="card-heading"><div><span class="eyebrow">Installations</span><h2>已发现的 uv</h2></div><span>{{ uvPaths.length }} 个</span></div>
         <div v-if="!uvPaths.length" class="empty">未发现其他 uv 安装</div>
-        <button v-for="path in uvPaths" :key="path" type="button" class="environment-row uv-installation" :class="{ selected: path === selectedUvPath }" @click="selectUv(path)"><div class="env-avatar">uv</div><div class="env-main"><strong>uv</strong><span :title="path">{{ path }}</span></div><span v-if="path === selectedUvPath" class="active-badge">当前</span></button>
+        <div v-for="path in uvPaths" :key="path" role="button" tabindex="0" class="environment-row uv-installation" :class="{ selected: path === selectedUvPath }" @click="selectUv(path)" @keydown.enter="selectUv(path)" @keydown.space.prevent="selectUv(path)"><div class="env-avatar">uv</div><div class="env-main"><strong>uv</strong><span :title="path">{{ path }}</span></div><button class="copy-button" :aria-label="`复制 ${path} 路径`" @click.stop="copyPath(path)">复制</button><span v-if="path === selectedUvPath" class="active-badge">当前</span></div>
       </article>
       <article class="card setup-card">
         <div class="card-heading"><div><span class="eyebrow">Virtual Environments</span><h2>uv 创建的环境</h2></div><span>{{ uvEnvironments.length }} 个</span></div>
         <div v-if="!uvEnvironments.length" class="empty">未发现 uv 虚拟环境</div>
-        <div v-for="item in uvEnvironments" :key="item.path" class="environment-row"><div class="env-avatar">uv</div><div class="env-main"><strong>{{ item.name }}</strong><span>{{ item.path }}</span></div><div class="env-meta"><strong>{{ item.pythonVersion }}</strong><span>uv</span></div></div>
+        <div v-for="item in uvEnvironments" :key="item.path" class="environment-row"><div class="env-avatar">uv</div><div class="env-main"><strong>{{ item.name }}</strong><span>{{ item.path }}</span></div><div class="env-meta"><strong>{{ item.pythonVersion }}</strong><span>uv</span></div><button class="copy-button" :aria-label="`复制 ${item.name} 路径`" @click="copyPath(item.path)">复制</button></div>
       </article>
     </div>
   </section>

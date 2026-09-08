@@ -2,7 +2,7 @@
 
 > 基于 Tauri 2、Rust 与 Vue 3 的纯本地桌面客户端，统一管理 Python、Conda、venv 与 pip 包操作。
 
-![Version](https://img.shields.io/badge/version-3.0.0-2ea44f)
+![Version](https://img.shields.io/badge/version-3.0.1-2ea44f)
 ![Platform](https://img.shields.io/badge/platform-Windows-0078d6)
 ![Stack](https://img.shields.io/badge/stack-Tauri%202%20%2B%20Rust%20%2B%20Vue%203-2563eb)
 ![License](https://img.shields.io/badge/License-GPLv3-blue.svg)
@@ -18,7 +18,7 @@ WJ Python管理大师是一个基于 **Tauri 2 + Rust + Vue 3** 的纯本地桌�
 | 🖥️ 概览 | 系统状态总览 |
 | 🚀 初始化配置 | 首次运行向导、Miniconda 安装与升级 |
 | 🧪 Conda | 环境创建 / 克隆 / 删除、YAML 导入导出、软件源切换、Python 版本查询 |
-| 🐍 Python | 本机 Python 扫描、Conda 环境 Python 无损升级 |
+| 🐍 Python | 本机 Python 扫描、系统 Python（winget）与 Conda 环境 Python 升级 |
 | 📦 venv / uv | 标准库 venv 与 uv 虚拟环境创建、删除 |
 | 🧩 包管理 | 安装 / 升级 / 卸载 / 批量升级 / requirements 安装、pip/uv 源选择 |
 | 📋 日志 | 统一运行日志面板、活跃进程监控 |
@@ -46,11 +46,13 @@ WJ Python管理大师是一个基于 **Tauri 2 + Rust + Vue 3** 的纯本地桌�
 ### 🐍 Python 版本管理
 
 - 扫描本机**已安装的 Python 版本**
+- **系统 Python 升级**：Windows 上通过 winget 升级 Python.org 安装的同一主次版本；Conda、venv、pyenv 使用各自的管理方式
 - **Conda 环境 Python 无损升级**：查询可升级的稳定版本 → 升级前 dry-run 依赖求解（无法求解的版本不允许升级）→ 备份 → 升级 → 升级后校验环境路径，全程可追踪进度
 
 ### 📦 venv 虚拟环境
 
-- 创建虚拟环境：指定名称与目标目录，可选指定 Python 路径
+- 创建虚拟环境：指定名称与目标目录；uv 模式无需预装 Python，可填写版本号（如 `3.13`）由 uv 自动下载，也可填写解释器路径
+- 支持指定目录扫描已有 `.venv`，危险删除操作需要确认；长时间任务支持取消
 - 创建工具可选 Python 标准库 `venv` 或 `uv`；uv 环境自动使用 `uv pip` 管理包
 - 自动检测 uv 版本；未安装 uv 时保留标准库 venv 流程
 - 删除虚拟环境

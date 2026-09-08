@@ -66,6 +66,22 @@ pub fn get_active_processes() -> Vec<crate::services::process_service::ActivePro
 #[tauri::command]
 pub async fn discover_python_versions() -> Result<Vec<String>, String> { Ok(crate::services::system_service::discover_python_versions().await) }
 
+#[tauri::command]
+pub fn start_uninstall_python(path: String) -> crate::services::task_service::TaskSnapshot {
+    crate::services::task_service::cleanup();
+    crate::services::task_service::start("python-uninstall", "正在卸载选中的 Python", async move {
+        crate::services::system_service::uninstall_python(path).await
+    })
+}
+
+#[tauri::command]
+pub fn start_upgrade_python(path: String) -> crate::services::task_service::TaskSnapshot {
+    crate::services::task_service::cleanup();
+    crate::services::task_service::start("python-upgrade", "正在升级系统 Python", async move {
+        crate::services::system_service::upgrade_python(path).await
+    })
+}
+
 
 #[tauri::command]
 pub async fn get_settings() -> Result<AppSettings, String> { crate::services::storage_service::read_settings().await }
@@ -91,6 +107,9 @@ pub fn start_initialize_environment(request: SetupRequest) -> crate::services::t
 pub fn get_operation_task(task_id: String) -> Result<crate::services::task_service::TaskSnapshot, String> {
     crate::services::task_service::snapshot(&task_id).ok_or_else(|| "任务不存在或已过期".into())
 }
+
+#[tauri::command]
+pub fn cancel_operation_task(task_id: String) -> Result<(), String> { crate::services::task_service::cancel(&task_id) }
 
 #[tauri::command]
 pub async fn list_conda_environments() -> Result<Vec<CondaEnvironment>, String> { crate::services::conda_service::list().await }

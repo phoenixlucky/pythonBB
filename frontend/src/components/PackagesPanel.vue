@@ -1,13 +1,66 @@
 <script setup lang="ts">
-import { computed, reactive, watch } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import { useWorkspaceStore } from "@/stores/workspace";
+
 const workspace = useWorkspaceStore();
 const form = reactive({ targetKey: "", packageName: "", indexUrl: "https://pypi.org/simple", requirementsPath: "" });
+const showAdvanced = ref(false);
 const selectedTarget = computed(() => workspace.targets.find((target) => JSON.stringify(target) === form.targetKey));
-watch(() => workspace.targets, (targets) => { if (!form.targetKey && targets[0]) form.targetKey = JSON.stringify(targets[0]); }, { immediate: true });
-watch(selectedTarget, (target) => { if (target) void workspace.loadPackages(target); });
-async function action(actionName: string) { if (selectedTarget.value) await workspace.packageAction({ target: selectedTarget.value, action: actionName, packageName: form.packageName, indexUrl: form.indexUrl, requirementsPath: form.requirementsPath }); }
+
+watch(() => workspace.targets, (targets) => {
+  if (!form.targetKey && targets[0]) form.targetKey = JSON.stringify(targets[0]);
+}, { immediate: true });
+
+watch(selectedTarget, (target) => {
+  if (target) void workspace.loadPackages(target);
+});
+
+async function action(actionName: string) {
+  if (selectedTarget.value) {
+    await workspace.packageAction({ target: selectedTarget.value, action: actionName, packageName: form.packageName, indexUrl: form.indexUrl, requirementsPath: form.requirementsPath });
+  }
+}
 </script>
+
 <template>
-  <section class="content"><div class="page-heading"><div><span class="eyebrow">// Packages</span><h1>包管理</h1><p>通过目标环境的 pip 执行安装、升级、卸载和查询。</p></div><button class="secondary" :disabled="!selectedTarget" @click="selectedTarget && workspace.loadPackages(selectedTarget)">刷新包</button></div><div class="workspace-columns"><article class="card form-card"><h2>包操作</h2><label>目标环境<select v-model="form.targetKey"><option value="" disabled>选择环境</option><option v-for="target in workspace.targets" :key="JSON.stringify(target)" :value="JSON.stringify(target)">{{ target.targetType }} / {{ target.name }}</option></select></label><label>包名<input v-model="form.packageName" placeholder="numpy" /></label><label>pip 源<input v-model="form.indexUrl" /></label><label>requirements 路径<input v-model="form.requirementsPath" placeholder="requirements.txt" /></label><div class="button-grid"><button class="primary" :disabled="workspace.busy || !form.packageName" @click="action('install')">安装</button><button class="secondary" :disabled="workspace.busy || !form.packageName" @click="action('upgrade')">升级</button><button class="secondary" :disabled="workspace.busy || !form.packageName" @click="action('uninstall')">卸载</button><button class="secondary" :disabled="workspace.busy || !form.packageName" @click="action('show')">查看详情</button><button class="secondary" :disabled="workspace.busy || !form.packageName" @click="action('latest')">查最新版本</button><button class="secondary" :disabled="workspace.busy" @click="action('upgrade-pip')">升级 pip</button><button class="secondary" :disabled="workspace.busy" @click="action('upgrade-all')">升级全部</button><button class="secondary" :disabled="workspace.busy || !form.requirementsPath" @click="action('requirements')">安装 requirements</button></div></article><article class="card"><div class="card-heading"><div><span class="eyebrow">Installed</span><h2>已安装包</h2></div><span>{{ workspace.packages.length }} 个</span></div><div class="package-list"><div v-for="item in workspace.packages" :key="item.name" class="package-row"><strong>{{ item.name }}</strong><span>{{ item.version }}</span><button class="link-button" @click="form.packageName = item.name">选择</button></div><div v-if="!workspace.packages.length" class="empty">请选择目标环境并刷新</div></div></article></div></section>
+  <section class="content">
+    <div class="page-heading">
+      <div><span class="eyebrow">// Packages</span><h1>包管理</h1><p>通过目标环境的 pip 执行安装、升级、卸载和查询。</p></div>
+      <button class="secondary" :disabled="!selectedTarget" @click="selectedTarget && workspace.loadPackages(selectedTarget)">刷新包</button>
+    </div>
+    <div class="workspace-columns">
+      <article class="card form-card">
+        <h2>包操作</h2>
+        <label>目标环境<select v-model="form.targetKey"><option value="" disabled>选择环境</option><option v-for="target in workspace.targets" :key="JSON.stringify(target)" :value="JSON.stringify(target)">{{ target.targetType }} / {{ target.name }}</option></select></label>
+        <p v-if="selectedTarget" class="target-context">当前操作：<strong>{{ selectedTarget.targetType }} / {{ selectedTarget.name }}</strong></p>
+        <label>包名<input v-model="form.packageName" placeholder="numpy" /></label>
+        <div class="package-primary-actions">
+          <button class="primary" :disabled="workspace.busy || !form.packageName" @click="action('install')">安装</button>
+          <button class="secondary" :disabled="workspace.busy || !form.packageName" @click="action('upgrade')">升级</button>
+          <button class="danger-action" :disabled="workspace.busy || !form.packageName" @click="action('uninstall')">卸载</button>
+        </div>
+        <details class="advanced-actions" :open="showAdvanced" @toggle="showAdvanced = ($event.target as HTMLDetailsElement).open">
+          <summary>高级操作</summary>
+          <div class="advanced-fields">
+            <label>pip 源<input v-model="form.indexUrl" /></label>
+            <label>requirements 路径<input v-model="form.requirementsPath" placeholder="requirements.txt" /></label>
+            <div class="button-grid">
+              <button class="secondary" :disabled="workspace.busy || !form.packageName" @click="action('show')">查看详情</button>
+              <button class="secondary" :disabled="workspace.busy || !form.packageName" @click="action('latest')">查最新版本</button>
+              <button class="secondary" :disabled="workspace.busy" @click="action('upgrade-pip')">升级 pip</button>
+              <button class="secondary" :disabled="workspace.busy" @click="action('upgrade-all')">升级全部</button>
+              <button class="secondary" :disabled="workspace.busy || !form.requirementsPath" @click="action('requirements')">安装 requirements</button>
+            </div>
+          </div>
+        </details>
+      </article>
+      <article class="card">
+        <div class="card-heading"><div><span class="eyebrow">Installed</span><h2>已安装包</h2></div><span>{{ workspace.packages.length }} 个</span></div>
+        <div class="package-list">
+          <div v-for="item in workspace.packages" :key="item.name" class="package-row"><strong>{{ item.name }}</strong><span>{{ item.version }}</span><button class="link-button" @click="form.packageName = item.name">选择</button></div>
+          <div v-if="!workspace.packages.length" class="empty">{{ selectedTarget ? "暂无已安装包或尚未刷新" : "先选择目标环境" }}</div>
+        </div>
+      </article>
+    </div>
+  </section>
 </template>
