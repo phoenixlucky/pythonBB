@@ -1,6 +1,6 @@
 {
   "name": "wj-python-manager-client",
-  "version": "3.0.1",
+  "version": "3.0.2",
   "private": true,
   "description": "WJ Python管理大师 Tauri desktop client",
   "author": "尉缭子科技",
@@ -18,13 +18,14 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.0",
-    "@vitejs/plugin-vue": "^6.0.1",
     "@types/node": "^24.0.0",
+    "@vitejs/plugin-vue": "^6.0.1",
     "typescript": "^5.9.2",
     "vite": "^8.0.0"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.8.0",
+    "@tauri-apps/plugin-dialog": "^2.7.3",
     "pinia": "^3.0.3",
     "vue": "^3.5.18",
     "vue-router": "^5.0.0"

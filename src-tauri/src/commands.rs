@@ -67,6 +67,9 @@ pub fn get_active_processes() -> Vec<crate::services::process_service::ActivePro
 pub async fn discover_python_versions() -> Result<Vec<String>, String> { Ok(crate::services::system_service::discover_python_versions().await) }
 
 #[tauri::command]
+pub async fn can_upgrade_system_python() -> bool { cfg!(windows) && crate::services::process_service::resolve_program("winget").await.is_some() }
+
+#[tauri::command]
 pub fn start_uninstall_python(path: String) -> crate::services::task_service::TaskSnapshot {
     crate::services::task_service::cleanup();
     crate::services::task_service::start("python-uninstall", "正在卸载选中的 Python", async move {

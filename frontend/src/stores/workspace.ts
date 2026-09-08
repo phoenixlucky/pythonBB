@@ -1,4 +1,4 @@
-import { computed, ref } from "vue";
+import { computed, reactive, ref } from "vue";
 import { defineStore } from "pinia";
 import { describeError, invokeCommand } from "@/lib/tauri";
 import type { ActiveProcess, CondaEnvironment, EnvironmentTarget, OperationResult, PackageInfo, TaskSnapshot, VirtualEnvironment } from "@/types";
@@ -9,6 +9,10 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   const packages = ref<PackageInfo[]>([]);
   const selectedTarget = ref<EnvironmentTarget | null>(null);
   const pythonVersions = ref<string[]>([]);
+  const condaPythonVersions = ref<string[]>([]);
+  const condaPythonSearchStatus = ref("");
+  const condaPythonSearchKey = ref("");
+  const condaPythonForm = reactive({ major: "3.14", channel: "conda-forge", environment: "", version: "" });
   const pending = ref(0);
   const busy = computed(() => pending.value > 0);
   const message = ref("");
@@ -88,5 +92,5 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   function clearLog() { message.value = ""; error.value = ""; output.value = ""; currentTask.value = null; }
 
   async function refreshAll() { await Promise.all([loadConda(), loadVenvs(), loadPythonVersions()]); }
-  return { conda, venvs, packages, selectedTarget, pythonVersions, targets, busy, message, error, output, activeProcesses, currentTask, loadConda, loadVenvs, loadPythonVersions, uninstallPython, startSystemPythonUpgrade, loadProcesses, createConda, deleteConda, exportConda, exportAllConda, upgradeConda, installUv, uninstallUv, importConda, createVenv, deleteVenv, loadPackages, packageAction, startSetup, startPythonUpgrade, cancelCurrentTask, clearLog, refreshAll };
+  return { conda, venvs, packages, selectedTarget, pythonVersions, condaPythonVersions, condaPythonSearchStatus, condaPythonSearchKey, condaPythonForm, targets, busy, message, error, output, activeProcesses, currentTask, loadConda, loadVenvs, loadPythonVersions, uninstallPython, startSystemPythonUpgrade, loadProcesses, createConda, deleteConda, exportConda, exportAllConda, upgradeConda, installUv, uninstallUv, importConda, createVenv, deleteVenv, loadPackages, packageAction, startSetup, startPythonUpgrade, cancelCurrentTask, clearLog, refreshAll };
 });

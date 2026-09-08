@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
 import { describeError, invokeCommand } from "@/lib/tauri";
+import { chooseDirectory } from "@/lib/dialog";
 import { useWorkspaceStore } from "@/stores/workspace";
 
 const workspace = useWorkspaceStore();
@@ -9,6 +10,7 @@ const uvPaths = ref<string[]>([]);
 const selectedUvPath = ref("");
 const uvEnvironments = computed(() => workspace.venvs.filter((item) => item.manager === "uv"));
 const form = reactive({ version: "", installDirectory: "" });
+const recommendedInstallDirectory = ref("");
 const loading = ref(false);
 const confirmingUninstall = ref(false);
 
@@ -20,7 +22,8 @@ async function refresh() {
     if (!uvPaths.value.includes(selectedUvPath.value)) selectedUvPath.value = uvPaths.value.includes(status.path) ? status.path : (uvPaths.value[0] || "");
     status.path = selectedUvPath.value;
     status.version = (await invokeCommand<string | null>("get_uv_version", { path: selectedUvPath.value || null })) || "";
-    if (!form.installDirectory) form.installDirectory = await invokeCommand<string>("get_uv_default_directory");
+    if (!recommendedInstallDirectory.value) recommendedInstallDirectory.value = await invokeCommand<string>("get_uv_default_directory");
+    if (!form.installDirectory) form.installDirectory = recommendedInstallDirectory.value;
   } catch (cause) {
     workspace.error = describeError(cause, "读取 uv 状态失败");
   } finally {
@@ -46,6 +49,13 @@ async function install() {
   if (task?.status === "completed") await refresh();
 }
 
+async function chooseInstallDirectory() {
+  try {
+    const selected = await chooseDirectory(form.installDirectory);
+    if (selected) form.installDirectory = selected;
+  } catch (cause) { workspace.error = describeError(cause, "选择 uv 安装目录失败"); }
+}
+
 async function uninstall() {
   confirmingUninstall.value = false;
   const task = await workspace.uninstallUv(selectedUvPath.value);
@@ -64,8 +74,8 @@ onMounted(refresh);
     <div class="workspace-columns">
       <article class="card form-card">
         <h2>安装 / 更新 uv</h2>
-        <label>安装目录<input v-model="form.installDirectory" :disabled="workspace.busy" placeholder="输入完整安装目录" /></label>
-        <label>指定版本（可选）<input v-model="form.version" placeholder="留空安装最新版，例如 0.8.17" /></label>
+        <label>安装目录<div class="input-action"><input v-model="form.installDirectory" :disabled="workspace.busy" placeholder="输入完整安装目录" /><button class="secondary" type="button" :disabled="workspace.busy" @click="chooseInstallDirectory">选择</button></div><small class="hint">推荐目录：{{ recommendedInstallDirectory || "读取中…" }}</small></label>
+        <label>指定版本（可选）<input v-model="form.version" :disabled="workspace.busy" placeholder="留空安装最新版，例如 0.8.17" /></label>
         <p class="hint">填写版本后会按指定版本安装；留空则安装最新版。安装需要联网。</p>
         <div class="button-grid"><button class="primary" :disabled="workspace.busy || loading" @click="install">{{ workspace.busy ? "处理中…" : status.path ? "安装 / 更新" : "一键安装" }}</button><button class="secondary" :disabled="workspace.busy || loading || !selectedUvPath" @click="confirmingUninstall = true">卸载选中 uv</button></div>
         <div v-if="confirmingUninstall" role="alert">

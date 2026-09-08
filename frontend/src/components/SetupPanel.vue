@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue";
 import { describeError, invokeCommand } from "@/lib/tauri";
+import { chooseDirectory } from "@/lib/dialog";
 import { useAppStore } from "@/stores/app";
 import { useWorkspaceStore } from "@/stores/workspace";
 
@@ -74,6 +75,13 @@ async function initialize() {
   if (!workspace.error) await refresh();
 }
 
+async function chooseInstallDirectory() {
+  try {
+    const selected = await chooseDirectory(form.installPath);
+    if (selected) form.installPath = selected;
+  } catch (cause) { workspace.error = describeError(cause, "选择 Miniconda 安装目录失败"); }
+}
+
 async function upgradeConda() {
   const task = await workspace.upgradeConda();
   if (task?.status === "completed") await refresh();
@@ -84,16 +92,16 @@ onMounted(refresh);
 
 <template>
   <section class="content">
-    <div class="page-heading"><div><span class="eyebrow">// First-run Setup</span><h1>新电脑初始化配置</h1><p>检测现有 Conda；缺失时安装最新版 Miniconda，再创建首个 Python 开发环境。</p></div><button class="secondary" @click="refresh">重新检测</button></div>
+    <div class="page-heading"><div><span class="eyebrow">// First-run Setup</span><h1>新电脑初始化配置</h1><p>检测现有 Conda；缺失时安装最新版 Miniconda，再创建首个 Python 开发环境。</p></div><button class="secondary" :disabled="workspace.busy" @click="refresh">重新检测</button></div>
     <div class="setup-layout">
       <article class="card form-card accent-card">
         <div class="card-badge-row"><span class="card-badge">One-click Setup</span><span class="card-badge subtle">conda-forge</span></div>
         <div class="card-heading"><div><h2>安装 Miniconda 并创建首个环境</h2></div><span>{{ status?.condaAvailable ? '已检测到 Conda · ' + status.environmentCount + ' 个环境' : '等待检测' }}</span></div>
         <p class="setup-intro">适用于新电脑。程序会检测现有 Conda，缺失时静默安装 Miniconda，并按选择的 Python 版本创建环境。</p>
-        <div class="form-slab"><label>Miniconda 安装目录<input v-model="form.installPath" required /></label><div class="setup-facts"><div><span>环境命名</span><strong>按版本自动生成，如 py314</strong></div><div><span>软件源</span><strong>conda-forge</strong></div><div><span>基础组件</span><strong>Python + ipykernel</strong></div></div></div>
+        <div class="form-slab"><label>Miniconda 安装目录<div class="input-action"><input v-model="form.installPath" required :disabled="workspace.busy" /><button class="secondary" type="button" :disabled="workspace.busy" @click="chooseInstallDirectory">选择</button></div></label><div class="setup-facts"><div><span>环境命名</span><strong>按版本自动生成，如 py314</strong></div><div><span>软件源</span><strong>conda-forge</strong></div><div><span>基础组件</span><strong>Python + ipykernel</strong></div></div></div>
         <label>Python 版本<select v-model="form.pythonVersion"><option value="3.14">3.14（推荐）</option><option value="3.13">3.13</option><option value="3.12">3.12</option><option value="3.11">3.11</option><option value="3.10">3.10</option></select></label>
-        <div class="setup-package-section"><div class="card-heading"><div><h3>Conda 常用库</h3><p>适合科学计算和数据文件处理，由 conda-forge 安装。</p></div><button class="secondary mini-button" type="button" @click="toggleAll('conda')">全选 / 清空</button></div><div class="package-choice-grid"><label v-for="item in condaCatalog" :key="item.id" class="package-choice"><input v-model="form.condaPackages" type="checkbox" :value="item.id" /><span><strong>{{ item.label }}</strong><small>{{ item.description }}</small></span></label></div></div>
-        <div class="setup-package-section"><div class="card-heading"><div><h3>pip 常用库</h3><p>环境创建完成后安装，可按需选择。</p></div><button class="secondary mini-button" type="button" @click="toggleAll('pip')">全选 / 清空</button></div><div class="package-choice-grid"><label v-for="item in pipCatalog" :key="item.id" class="package-choice"><input v-model="form.pipPackages" type="checkbox" :value="item.id" /><span><strong>{{ item.label }}</strong><small>{{ item.description }}</small></span></label></div></div>
+        <div class="setup-package-section"><div class="card-heading"><div><h3>Conda 常用库</h3><p>适合科学计算和数据文件处理，由 conda-forge 安装。</p></div><button class="secondary mini-button" type="button" :disabled="workspace.busy" @click="toggleAll('conda')">全选 / 清空</button></div><div class="package-choice-grid"><label v-for="item in condaCatalog" :key="item.id" class="package-choice"><input v-model="form.condaPackages" type="checkbox" :value="item.id" :disabled="workspace.busy" /><span><strong>{{ item.label }}</strong><small>{{ item.description }}</small></span></label></div></div>
+        <div class="setup-package-section"><div class="card-heading"><div><h3>pip 常用库</h3><p>环境创建完成后安装，可按需选择。</p></div><button class="secondary mini-button" type="button" :disabled="workspace.busy" @click="toggleAll('pip')">全选 / 清空</button></div><div class="package-choice-grid"><label v-for="item in pipCatalog" :key="item.id" class="package-choice"><input v-model="form.pipPackages" type="checkbox" :value="item.id" :disabled="workspace.busy" /><span><strong>{{ item.label }}</strong><small>{{ item.description }}</small></span></label></div></div>
         <button class="primary wide" :disabled="workspace.busy || !form.installPath" @click="initialize">{{ workspace.busy ? '初始化中…' : '开始初始化' }}</button>
       </article>
       <div class="aside-stack">

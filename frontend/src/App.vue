@@ -76,13 +76,13 @@ onUnmounted(() => { if (processTimer) window.clearInterval(processTimer); });
           <span class="target-chip">环境 {{ workspace.targets.length }}</span>
         </div>
       </header>
+      <div v-if="app.error" class="error-banner global-error-banner" role="alert">{{ app.error }}<button class="link-button" @click="app.error = ''">关闭</button></div>
 
       <section v-if="activePanel === 'overview'" class="content">
         <div class="page-heading">
           <div><span class="eyebrow">// Overview</span><h1>系统与运行时总览</h1><p>查看本机 Python 工具链和 Conda 环境状态。</p></div>
           <button class="primary" :disabled="app.loading" @click="app.refresh">{{ app.loading ? "刷新中…" : "刷新状态" }}</button>
         </div>
-        <div v-if="app.error" class="error-banner">{{ app.error }}</div>
         <div class="stat-grid">
           <article><span>Python</span><strong>{{ app.overview?.runtime.python || "--" }}</strong><small>系统默认解释器</small></article>
           <article><span>Conda 环境</span><strong>{{ app.overview?.environments.length ?? "--" }}</strong><small>已发现环境</small></article>
@@ -96,12 +96,14 @@ onUnmounted(() => { if (processTimer) window.clearInterval(processTimer); });
             <div v-for="environment in app.overview?.environments" :key="environment.prefix" class="environment-row">
               <div class="env-avatar">py</div><div class="env-main"><strong>{{ environment.name }}</strong><span>{{ environment.prefix }}</span></div>
               <div class="env-meta"><strong>{{ environment.python }}</strong><span>{{ environment.packageCount }} 个包</span></div>
+              <button class="row-action" :disabled="workspace.busy" @click="activePanel = 'conda'">管理</button>
               <span v-if="environment.active" class="active-badge">当前</span>
             </div>
             <div v-if="workspace.venvs.length" class="environment-divider"><span>虚拟环境</span><small>{{ workspace.venvs.length }} 个</small></div>
             <div v-for="environment in workspace.venvs.slice(0, 4)" :key="environment.path" class="environment-row">
               <div class="env-avatar venv-avatar">{{ environment.manager === "uv" ? "uv" : "venv" }}</div><div class="env-main"><strong>{{ environment.name }}</strong><span>{{ environment.path }}</span></div>
               <div class="env-meta"><strong>{{ environment.pythonVersion }}</strong><span>{{ environment.manager }}</span></div>
+              <button class="row-action" :disabled="workspace.busy" @click="activePanel = 'venv'">管理</button>
             </div>
           </article>
           <article class="card next-card">

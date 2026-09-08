@@ -2,7 +2,7 @@
 
 > 基于 Tauri 2、Rust 与 Vue 3 的纯本地桌面客户端，统一管理 Python、Conda、venv 与 pip 包操作。
 
-![Version](https://img.shields.io/badge/version-3.0.1-2ea44f)
+![Version](https://img.shields.io/badge/version-3.0.2-2ea44f)
 ![Platform](https://img.shields.io/badge/platform-Windows-0078d6)
 ![Stack](https://img.shields.io/badge/stack-Tauri%202%20%2B%20Rust%20%2B%20Vue%203-2563eb)
 ![License](https://img.shields.io/badge/License-GPLv3-blue.svg)

@@ -40,8 +40,9 @@ export const useAppStore = defineStore("app", () => {
   async function loadSettings() {
     try {
       settings.value = { ...defaultSettings, ...(await invokeCommand<Partial<AppSettings>>("get_settings")) };
-    } catch {
+    } catch (cause) {
       settings.value = { ...defaultSettings };
+      error.value = describeError(cause, "读取设置失败");
     }
   }
 

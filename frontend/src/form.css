@@ -9,9 +9,91 @@
   flex: 1;
 }
 
+.workspace-columns > .card,
+.form-card input,
+.form-card select {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.form-card select {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .input-action .secondary {
   padding: 9px 10px;
   white-space: nowrap;
+}
+
+.global-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 44px 0;
+}
+
+.global-error-banner .link-button {
+  margin-left: auto;
+}
+
+.field-error {
+  margin: 0;
+  color: #be123c;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.list-search {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 12px;
+  color: #68768a;
+  font-size: 12px;
+}
+
+.row-action {
+  border: 1px solid #dbeafe;
+  border-radius: 7px;
+  padding: 6px 9px;
+  background: #eff6ff;
+  color: #2563eb;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.row-action:disabled {
+  cursor: wait;
+  opacity: .6;
+}
+
+.secondary:disabled,
+.link-button:disabled {
+  cursor: wait;
+  opacity: .6;
+}
+
+.query-status {
+  margin: -4px 0 0;
+}
+
+.inline-tools > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.inline-tools > div > input,
+.inline-tools > div > select,
+.inline-tools > div > .input-action {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.inline-tools > div > .input-action {
+  display: flex;
 }
 
 .setup-layout {
@@ -664,6 +746,60 @@
 
 .settings-actions .secondary {
   flex: 1;
+}
+
+.wallpaper-section {
+  display: grid;
+  gap: 9px;
+}
+
+.settings-subheading {
+  display: flex;
+  justify-content: space-between;
+  color: #68768a;
+  font-size: 12px;
+}
+
+.settings-subheading span {
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.wallpaper-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.wallpaper-option {
+  overflow: hidden;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 9px;
+  background: #f8fafc;
+  color: #64748b;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.wallpaper-option:hover,
+.wallpaper-option.selected {
+  border-color: #2563eb;
+  color: #2563eb;
+}
+
+.wallpaper-option img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+
+.wallpaper-option span {
+  display: block;
+  padding: 7px 9px;
 }
 
 .color-fields {

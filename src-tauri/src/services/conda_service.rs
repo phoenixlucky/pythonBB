@@ -15,6 +15,7 @@ struct CondaEnvironmentList {
 struct CondaEnvironmentMeta {
     name: Option<String>,
     active: Option<bool>,
+    base: Option<bool>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -151,9 +152,13 @@ pub async fn list() -> Result<Vec<CondaEnvironment>, String> {
         if !seen.insert(normalized) { continue; }
         let path = PathBuf::from(&prefix);
         let metadata = envs_details.get(&prefix);
-        let name = metadata.and_then(|item| item.name.clone()).unwrap_or_else(|| if path.parent().and_then(Path::file_name).map(|item| item.to_string_lossy().eq_ignore_ascii_case("envs")).unwrap_or(false) {
-            path.file_name().map(|item| item.to_string_lossy().to_string()).unwrap_or_else(|| "base".into())
-        } else { "base".into() });
+        let name = metadata.and_then(|item| item.name.clone()).filter(|name| !name.trim().is_empty()).unwrap_or_else(|| {
+            if metadata.and_then(|item| item.base).unwrap_or(false) {
+                "base".into()
+            } else {
+                path.file_name().map(|item| item.to_string_lossy().to_string()).filter(|name| !name.trim().is_empty()).unwrap_or_else(|| "未命名环境".into())
+            }
+        });
         environments.push(CondaEnvironment {
             name,
             prefix: prefix.clone(),

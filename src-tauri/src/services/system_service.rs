@@ -66,9 +66,7 @@ pub async fn discover_python_versions() -> Vec<String> {
         }
     }
 
-    if let Ok(conda_prefixes) = conda_service::list_prefixes().await {
-        candidates.extend(conda_prefixes);
-    }
+    let conda_prefixes = conda_service::list_prefixes().await.unwrap_or_default();
 
     let mut executables = Vec::new();
     for candidate in candidates {
@@ -83,7 +81,7 @@ pub async fn discover_python_versions() -> Vec<String> {
     let mut versions = Vec::new();
     for executable in executables {
         let key = executable.to_string_lossy().to_ascii_lowercase();
-        if !seen.insert(key) || is_blocked_windows_alias(&executable) {
+        if !seen.insert(key) || is_blocked_windows_alias(&executable) || is_managed_python(&executable, &conda_prefixes) {
             continue;
         }
         if let Some(version) = python_version_at(&executable).await {
@@ -239,6 +237,34 @@ fn parse_python_launcher_paths(output: &str) -> Vec<PathBuf> {
 
 fn is_blocked_windows_alias(path: &Path) -> bool {
     cfg!(windows) && path.to_string_lossy().to_ascii_lowercase().contains("\\windowsapps\\")
+}
+
+fn is_managed_python(executable: &Path, conda_prefixes: &[PathBuf]) -> bool {
+    if conda_prefixes.iter().any(|prefix| {
+        [
+            prefix.join("python.exe"),
+            prefix.join("bin").join("python"),
+            prefix.join("bin").join("python3"),
+        ]
+        .iter()
+        .any(|candidate| same_path(executable, candidate))
+    }) {
+        return true;
+    }
+
+    let path_text = executable.to_string_lossy().to_ascii_lowercase();
+    if path_text.contains("\\.pyenv\\") || path_text.contains("/.pyenv/") || path_text.contains("\\.asdf\\") || path_text.contains("/.asdf/") {
+        return true;
+    }
+
+    let mut directory = executable.parent();
+    while let Some(path) = directory {
+        if path.join("conda-meta").is_dir() || path.join("pyvenv.cfg").is_file() {
+            return true;
+        }
+        directory = path.parent();
+    }
+    false
 }
 
 async fn python_version_at(executable: &Path) -> Option<String> {

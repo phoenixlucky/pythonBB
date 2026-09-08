@@ -4,10 +4,12 @@ mod services;
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             commands::get_overview,
             commands::get_active_processes,
             commands::discover_python_versions,
+            commands::can_upgrade_system_python,
             commands::start_uninstall_python,
             commands::start_upgrade_python,
             commands::get_settings,
