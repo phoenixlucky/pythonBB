@@ -35,6 +35,11 @@ export interface VirtualEnvironment {
   pythonVersion: string;
 }
 
+export interface UvPythonInstallation {
+  version: string;
+  path: string;
+}
+
 export interface PackageInfo {
   name: string;
   version: string;

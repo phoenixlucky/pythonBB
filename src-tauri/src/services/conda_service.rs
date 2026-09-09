@@ -330,7 +330,18 @@ pub async fn remove(name: String) -> Result<OperationResult, String> {
 }
 
 pub async fn export(name: String, path: String) -> Result<OperationResult, String> {
-    let args = vec!["env".into(), "export".into(), "-n".into(), name, "-f".into(), path];
+    // Conda 26+ no longer infers the export format from arbitrary filenames.
+    // The application uses YAML for all environment exports, including
+    // automatically generated pre-upgrade backups.
+    let args = vec![
+        "export".into(),
+        "-n".into(),
+        name,
+        "--format".into(),
+        "environment-yaml".into(),
+        "-f".into(),
+        path,
+    ];
     let result = run_conda(&args).await?;
     if !result.ok { return Err(failure(&result, "导出 Conda 环境失败")); }
     Ok(OperationResult { ok: true, message: "Conda 环境导出完成".into(), command: result.command, output: result.stdout })

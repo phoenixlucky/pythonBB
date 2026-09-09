@@ -50,8 +50,11 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   async function upgradeConda() { return runTask(() => invokeCommand<TaskSnapshot>("start_upgrade_conda")); }
   async function installUv(version = "", installDirectory = "") { return runTask(() => invokeCommand<TaskSnapshot>("start_install_uv", { version: version.trim() || null, installDirectory: installDirectory.trim() || null })); }
   async function uninstallUv(path = "") { return runTask(() => invokeCommand<TaskSnapshot>("start_uninstall_uv", { path })); }
+  async function uninstallUvPython(path = "") { return runTask(() => invokeCommand<TaskSnapshot>("start_uninstall_uv_python", { path })); }
   async function importConda(payload: Record<string, unknown>) { const value = await run(() => invokeCommand<OperationResult>("import_conda_environment", { request: payload })); if (value) { showResult(value); await loadConda(); } }
   async function createVenv(payload: Record<string, unknown>) { const value = await run(() => invokeCommand<OperationResult>("create_virtual_environment", { request: payload })); if (value) { showResult(value); await loadVenvs(); } }
+  async function exportUvEnvironment(environmentPath: string, filePath: string) { const task = await runTask(() => invokeCommand<TaskSnapshot>("start_export_uv_environment", { request: { environmentPath, filePath } })); return task; }
+  async function importUvEnvironment(environmentPath: string, filePath: string) { const task = await runTask(() => invokeCommand<TaskSnapshot>("start_import_uv_environment", { request: { environmentPath, filePath } })); return task; }
   async function deleteVenv(path: string) { const value = await run(() => invokeCommand<OperationResult>("delete_virtual_environment", { path })); if (value) { showResult(value); await loadVenvs(); } }
   async function loadPackages(target: EnvironmentTarget) { selectedTarget.value = target; const value = await run(() => invokeCommand<PackageInfo[]>("list_packages", { target })); if (value) packages.value = value; }
   async function loadProcesses() { activeProcesses.value = await invokeCommand<ActiveProcess[]>("get_active_processes"); }
@@ -92,5 +95,5 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   function clearLog() { message.value = ""; error.value = ""; output.value = ""; currentTask.value = null; }
 
   async function refreshAll() { await Promise.all([loadConda(), loadVenvs(), loadPythonVersions()]); }
-  return { conda, venvs, packages, selectedTarget, pythonVersions, condaPythonVersions, condaPythonSearchStatus, condaPythonSearchKey, condaPythonForm, targets, busy, message, error, output, activeProcesses, currentTask, loadConda, loadVenvs, loadPythonVersions, uninstallPython, startSystemPythonUpgrade, loadProcesses, createConda, deleteConda, exportConda, exportAllConda, upgradeConda, installUv, uninstallUv, importConda, createVenv, deleteVenv, loadPackages, packageAction, startSetup, startPythonUpgrade, cancelCurrentTask, clearLog, refreshAll };
+  return { conda, venvs, packages, selectedTarget, pythonVersions, condaPythonVersions, condaPythonSearchStatus, condaPythonSearchKey, condaPythonForm, targets, busy, message, error, output, activeProcesses, currentTask, loadConda, loadVenvs, loadPythonVersions, uninstallPython, startSystemPythonUpgrade, loadProcesses, createConda, deleteConda, exportConda, exportAllConda, upgradeConda, installUv, uninstallUv, uninstallUvPython, importConda, createVenv, exportUvEnvironment, importUvEnvironment, deleteVenv, loadPackages, packageAction, startSetup, startPythonUpgrade, cancelCurrentTask, clearLog, refreshAll };
 });

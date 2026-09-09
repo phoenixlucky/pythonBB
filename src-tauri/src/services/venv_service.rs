@@ -95,6 +95,37 @@ pub async fn create(name: String, target_path: String, python_path: Option<Strin
     Ok(OperationResult { ok: true, message: format!("虚拟环境 {name} 创建完成"), command: result.command, output: result.stdout })
 }
 
+pub async fn export_uv(path: String, file_path: String) -> Result<OperationResult, String> {
+    let environment = PathBuf::from(path.trim());
+    let output = PathBuf::from(file_path.trim());
+    let python = python_executable(&environment);
+    if !python.is_file() { return Err("选中的 uv 环境无有效 Python 解释器".into()); }
+    if output.as_os_str().is_empty() { return Err("缺少导出文件路径".into()); }
+    let uv = resolve_program("uv").await.ok_or("未检测到 uv，请先安装 uv")?;
+    let args = vec!["pip".into(), "freeze".into(), "--python".into(), python.to_string_lossy().to_string()];
+    let result = run(&uv, &args, None).await;
+    if !result.ok { return Err(failure(&result, "导出 uv 环境失败")); }
+    tokio::fs::write(&output, &result.stdout).await.map_err(|error| format!("写入导出文件失败: {error}"))?;
+    Ok(OperationResult { ok: true, message: "uv 环境依赖导出完成".into(), command: result.command, output: output.to_string_lossy().to_string() })
+}
+
+pub async fn import_uv(path: String, file_path: String) -> Result<OperationResult, String> {
+    let environment = PathBuf::from(path.trim());
+    let requirements = PathBuf::from(file_path.trim());
+    let python = python_executable(&environment);
+    if !python.is_file() { return Err("选中的 uv 环境无有效 Python 解释器".into()); }
+    if !requirements.is_file() { return Err("依赖文件不存在".into()); }
+    let uv = resolve_program("uv").await.ok_or("未检测到 uv，请先安装 uv")?;
+    let args = vec![
+        "pip".into(), "install".into(),
+        "--python".into(), python.to_string_lossy().to_string(),
+        "--requirement".into(), requirements.to_string_lossy().to_string(),
+    ];
+    let result = run(&uv, &args, None).await;
+    if !result.ok { return Err(failure(&result, "导入 uv 环境依赖失败")); }
+    Ok(OperationResult { ok: true, message: "uv 环境依赖导入完成".into(), command: result.command, output: result.stdout })
+}
+
 fn registry_path() -> PathBuf { home_dir().join(".wj-python-venv-roots.json") }
 
 pub async fn remove(path: String) -> Result<OperationResult, String> {

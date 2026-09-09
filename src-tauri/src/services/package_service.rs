@@ -6,6 +6,24 @@ use std::path::Path;
 #[derive(Debug, Deserialize)]
 struct OutdatedPackage { name: String }
 
+fn normalize_package_spec(package: &str) -> String {
+    let trimmed = package.trim();
+    let lower = trimmed.to_ascii_lowercase();
+    for prefix in ["wei_data_shu.", "wei-data-shu."] {
+        if let Some(extra) = lower.strip_prefix(prefix) {
+            let extra = match extra {
+                "excel" => "excel",
+                "database" => "database",
+                "analysis" => "analysis",
+                "excel_client" | "excel-client" => "excel-client",
+                _ => return trimmed.to_string(),
+            };
+            return format!("wei-data-shu[{extra}]");
+        }
+    }
+    trimmed.to_string()
+}
+
 fn python_executable(path: &Path) -> String {
     if cfg!(windows) { path.join("python.exe") } else { path.join("bin").join("python") }.to_string_lossy().to_string()
 }
@@ -25,6 +43,13 @@ mod tests {
         let target = crate::domain::models::EnvironmentTarget { target_type: "venv".into(), path: Some("sample-env".into()), ..Default::default() };
         let path = super::target_path(&target).unwrap();
         assert!(if cfg!(windows) { path.ends_with("Scripts\\python.exe") } else { path.ends_with("bin/python") });
+    }
+
+    #[test]
+    fn normalizes_wei_data_shu_extra_syntax() {
+        assert_eq!(super::normalize_package_spec("wei_data_shu.database"), "wei-data-shu[database]");
+        assert_eq!(super::normalize_package_spec("wei-data-shu.excel_client"), "wei-data-shu[excel-client]");
+        assert_eq!(super::normalize_package_spec("numpy"), "numpy");
     }
 
     #[tokio::test]
@@ -100,7 +125,11 @@ pub async fn execute(target: EnvironmentTarget, action: String, package_name: Op
         args.extend(names);
     } else if action != "upgrade-pip" && action != "requirements" {
         let package = package_name.filter(|value| !value.trim().is_empty()).ok_or_else(|| "缺少包名".to_string())?;
-        args.push(package);
+        args.push(if matches!(action.as_str(), "install" | "upgrade") {
+            normalize_package_spec(&package)
+        } else {
+            package
+        });
     }
     let result = run_pip(&target, args).await?;
     if !result.ok { return Err(failure(&result, "包操作失败")); }

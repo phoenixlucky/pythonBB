@@ -59,6 +59,13 @@ pub mod models {
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct UvPythonInstallation {
+        pub version: String,
+        pub path: String,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct Package {
         pub name: String,
         pub version: String,

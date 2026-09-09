@@ -40,6 +40,10 @@ pub struct VenvCreateRequest { pub name: String, pub target_path: String, pub py
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct VenvFileRequest { pub environment_path: String, pub file_path: String }
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PackageActionRequest {
     pub target: EnvironmentTarget,
     pub action: String,
@@ -144,6 +148,9 @@ pub async fn get_uv_path() -> Option<String> { crate::services::uv_service::path
 pub async fn get_uv_paths() -> Vec<String> { crate::services::uv_service::paths().await }
 
 #[tauri::command]
+pub async fn get_uv_python_installations() -> Vec<crate::domain::models::UvPythonInstallation> { crate::services::uv_service::python_installations().await }
+
+#[tauri::command]
 pub fn start_install_uv(version: Option<String>, install_directory: Option<String>) -> crate::services::task_service::TaskSnapshot {
     crate::services::task_service::cleanup();
     crate::services::task_service::start("uv-install", "正在安装 uv", async {
@@ -204,6 +211,30 @@ pub async fn list_virtual_environments(last_directory: Option<String>) -> Result
 
 #[tauri::command]
 pub async fn create_virtual_environment(request: VenvCreateRequest) -> Result<OperationResult, String> { crate::services::venv_service::create(request.name, request.target_path, request.python_path, request.manager).await }
+
+#[tauri::command]
+pub fn start_export_uv_environment(request: VenvFileRequest) -> crate::services::task_service::TaskSnapshot {
+    crate::services::task_service::cleanup();
+    crate::services::task_service::start("uv-export", "正在导出 uv 环境依赖", async move {
+        crate::services::venv_service::export_uv(request.environment_path, request.file_path).await
+    })
+}
+
+#[tauri::command]
+pub fn start_uninstall_uv_python(path: String) -> crate::services::task_service::TaskSnapshot {
+    crate::services::task_service::cleanup();
+    crate::services::task_service::start("uv-python-uninstall", "正在卸载 uv Python", async move {
+        crate::services::uv_service::uninstall_python(path).await
+    })
+}
+
+#[tauri::command]
+pub fn start_import_uv_environment(request: VenvFileRequest) -> crate::services::task_service::TaskSnapshot {
+    crate::services::task_service::cleanup();
+    crate::services::task_service::start("uv-import", "正在导入 uv 环境依赖", async move {
+        crate::services::venv_service::import_uv(request.environment_path, request.file_path).await
+    })
+}
 
 #[tauri::command]
 pub async fn delete_virtual_environment(path: String) -> Result<OperationResult, String> { crate::services::venv_service::remove(path).await }

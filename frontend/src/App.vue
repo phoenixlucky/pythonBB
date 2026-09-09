@@ -63,7 +63,6 @@ onUnmounted(() => { if (processTimer) window.clearInterval(processTimer); });
       <div class="sidebar-foot">
         <span class="status-dot" :class="{ busy: app.loading }"></span>
         <span>{{ app.loading ? "读取中" : "就绪" }}</span>
-        <small>Tauri Client</small>
       </div>
     </aside>
 

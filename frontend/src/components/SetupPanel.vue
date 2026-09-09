@@ -33,7 +33,10 @@ const pipCatalog = [
   { id: "PyMySQL", label: "PyMySQL", description: "纯 Python MySQL 客户端" },
   { id: "mysql-connector-python", label: "MySQL Connector", description: "MySQL 官方连接器" },
   { id: "schedule", label: "Schedule", description: "轻量定时任务" },
-  { id: "wei-data-shu", label: "wei-data-shu", description: "数据处理工具" },
+  { id: "wei-data-shu[excel]", label: "wei-data-shu[excel]", description: "Excel 读写、拆分与合并" },
+  { id: "wei-data-shu[database]", label: "wei-data-shu[database]", description: "MySQL 数据库支持" },
+  { id: "wei-data-shu[analysis]", label: "wei-data-shu[analysis]", description: "文本分析、词云、趋势预测与数据分析" },
+  { id: "wei-data-shu[excel-client]", label: "wei-data-shu[excel-client]", description: "通过本机 Excel 应用操作工作簿和宏" },
 ];
 const steps = [
   { label: "检测电脑上的 Conda", progress: 10 },

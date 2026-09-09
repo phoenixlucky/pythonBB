@@ -1,6 +1,80 @@
-use crate::domain::models::OperationResult;
+use crate::domain::models::{OperationResult, UvPythonInstallation};
 use crate::services::process_service::{failure, resolve_program, run, run_with_env};
 use std::path::{Path, PathBuf};
+
+fn python_install_directory() -> PathBuf {
+    if let Some(directory) = std::env::var_os("UV_PYTHON_INSTALL_DIR").filter(|value| !value.is_empty()) {
+        return PathBuf::from(directory);
+    }
+
+    if cfg!(windows) {
+        std::env::var_os("APPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_default()
+            .join("uv")
+            .join("python")
+    } else {
+        std::env::var_os("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .or_else(|| std::env::var_os("HOME").map(|value| PathBuf::from(value).join(".local").join("share")))
+            .unwrap_or_default()
+            .join("uv")
+            .join("python")
+    }
+}
+
+async fn python_version(path: &Path) -> Option<String> {
+    let executable = path.join(if cfg!(windows) { "python.exe" } else { "bin/python" });
+    if !executable.is_file() { return None; }
+    let result = run(executable.to_str()?, &["--version".into()], None).await;
+    if !result.ok { return None; }
+    let value = result.stdout.lines().chain(result.stderr.lines()).find(|line| !line.trim().is_empty())?.trim();
+    let version = value.strip_prefix("Python ").unwrap_or(value).trim();
+    (!version.is_empty()).then(|| version.to_string())
+}
+
+pub async fn python_installations() -> Vec<UvPythonInstallation> {
+    let root = python_install_directory();
+    let Ok(mut entries) = tokio::fs::read_dir(&root).await else { return Vec::new(); };
+    let mut installations = Vec::new();
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        let Ok(file_type) = entry.file_type().await else { continue; };
+        if !file_type.is_dir() { continue; }
+        let directory = entry.path();
+        let Some(version) = python_version(&directory).await else { continue; };
+        installations.push(UvPythonInstallation {
+            version,
+            path: directory.to_string_lossy().to_string(),
+        });
+    }
+    installations.sort_by(|left, right| right.version.cmp(&left.version).then_with(|| left.path.cmp(&right.path)));
+    installations
+}
+
+fn is_uv_python_installation(path: &Path, root: &Path) -> bool {
+    let Ok(relative) = path.strip_prefix(root) else { return false; };
+    relative.components().count() == 1
+        && path.is_dir()
+        && path.join(if cfg!(windows) { "python.exe" } else { "bin/python" }).is_file()
+}
+
+pub async fn uninstall_python(path: String) -> Result<OperationResult, String> {
+    let requested = PathBuf::from(path.trim());
+    let root = python_install_directory();
+    let canonical_root = tokio::fs::canonicalize(&root).await.map_err(|_| "uv Python 安装目录不存在".to_string())?;
+    let canonical_requested = tokio::fs::canonicalize(&requested).await.map_err(|_| "所选 uv Python 目录不存在".to_string())?;
+    if !is_uv_python_installation(&canonical_requested, &canonical_root) {
+        return Err("所选目录不在 uv 的 Python 安装目录中，已拒绝卸载".into());
+    }
+
+    tokio::fs::remove_dir_all(&canonical_requested).await.map_err(|error| format!("卸载 uv Python 失败：{error}"))?;
+    Ok(OperationResult {
+        ok: true,
+        message: "uv Python 已卸载".into(),
+        command: format!("remove {}", canonical_requested.to_string_lossy()),
+        output: canonical_requested.to_string_lossy().to_string(),
+    })
+}
 
 fn validate_version(version: Option<String>) -> Result<Option<String>, String> {
     let Some(value) = version.map(|value| value.trim().to_string()).filter(|value| !value.is_empty()) else {
